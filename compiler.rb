@@ -108,6 +108,8 @@ def next_token!(tokens)
 end
 
 def parse_!(state, tokens)
+  # p ['parse_!', state, tokens.reverse]
+
   case state
   when :scope
     next_token!(tokens) { |tok| raise "scope missing '{': #{tok[1]}" unless tok == [:symbol, '{'] }
@@ -126,43 +128,54 @@ def parse_!(state, tokens)
     next_token!(tokens) { |tok| raise "missing semicolon: #{tok[1]}" unless tok == [:symbol, ';'] }
     [:let, target, rhs]
   when :expression
-    p ['exp', tokens.reverse]
-    type1, val1 = tok1 = next_token!(tokens)
-    if tok1 == [:symbol, '(']
-      exp = parse_!(:expression, tokens)
-      next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
-
-      lhs = exp
-    else
-      lhs = tok1
-    end
-    p lhs
-    type2, val2 = tok2 = next_token!(tokens)
-
-    if type2 == :symbol
-      case val2
-      when '('
-        params = parse_!(:list, tokens)
-        next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
-        [:call, lhs, params]
-      when '+'
-        p 'plus'
-        [:binop, tok2, lhs, parse_!(:expression, tokens)]
-      when '-'
-        [:binop, tok2, lhs, parse_!(:expression, tokens)]
-      when '*'
-        [:binop, tok2, lhs, parse_!(:expression, tokens)]
+    type, val = tok = next_token!(tokens)
+    case type
+    when :string
+      lhs = tok
+    when :integer
+      lhs = tok
+    when :identifier
+      type2, val2 = tok2 = tokens.last # peek
+      if tok2 == [:symbol, '(']
+        tokens << tok # put func name back
+        lhs = parse_!(:call, tokens)
       else
-        tokens << tok2 # put it back
+        lhs = tok
+      end
+    when :symbol
+      if tok == [:symbol, '(']
+        lhs = parse_!(:expression, tokens)
+        next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+      end
+    end
+
+    type, val = tok = next_token!(tokens)
+    if type == :symbol
+      case val
+      when '+'
+        [:binop, tok, lhs, parse_!(:expression, tokens)]
+      when '-'
+        [:binop, tok, lhs, parse_!(:expression, tokens)]
+      when '*'
+        [:binop, tok, lhs, parse_!(:expression, tokens)]
+      else # e.g. ')', ';', or ','
+        tokens << tok # put it back
         lhs
       end
     else
-      raise "bad expression: #{lhs}"
+      raise "bad expression: #{val}"
     end
-
-
-
-  when :list
+  when :call
+    name_ = next_token!(tokens) { |type, val| raise "bad call name: #{name_}: #{tok[1]}" unless type == :identifier }
+    next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
+    params = parse_!(:explist, tokens)
+    next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+    [:call, name_, params]
+  when :print
+    params = parse_!(:explist, tokens)
+    next_token!(tokens) { |tok| raise "missing semicolon: #{tok[1]}" unless tok == [:symbol, ';'] }
+    [:print, params]
+  when :explist
     if tokens.last == [:symbol, ")"] # peek
       []
     else
@@ -190,10 +203,6 @@ def parse_!(state, tokens)
         end
       end
     end
-  when :print
-    params = parse_!(:list, tokens)
-    next_token!(tokens) { |tok| raise "missing semicolon: #{tok[1]}" unless tok == [:symbol, ';'] }
-    [:print, params]
   when :def
     name_ = next_token!(tokens) { |(type, val)| raise "bad function name: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "def '#{name_[1]}' missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
@@ -234,8 +243,7 @@ def parse_!(state, tokens)
       raise "unexpected end of input"
     end
   else
-    puts "unimplemented state: #{state}" # @TODO raise
-    next_token!(tokens)
+    raise "unimplemented state: #{state}"
   end
 end
 
