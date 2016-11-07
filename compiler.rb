@@ -1,13 +1,6 @@
 #!/usr/bin/env ruby
 
 
-# Token = Struct.new(:type, :val) do
-#   def initialize
-#     raise "iae: bad token: #{self}" unless token_types
-#     super
-#   end
-# end
-
 RESERVED = %w(true false set def if while print return break)
 SYMBOLS = %w(+ - * = < > ; ( ) , { })
 
@@ -293,6 +286,21 @@ def parse_!(state, tokens)
   end
 end
 
+def string_escape(str)
+  "\"" + (str.chars.map do |char|
+    case char
+    when "\n"
+      "\\n"
+    when "\\"
+      "\\\\"
+    when "\""
+      "\\\""
+    else
+      char
+    end
+  end.join) + "\""
+end
+
 def generate_code(node)
   codegen(node)
 end
@@ -339,6 +347,9 @@ def codegen(node)
     when '_join'
       arr, sep = args
       "#{codegen(arr)}.join(#{codegen(sep)})"
+    when '_length'
+      arr, = args
+      "#{codegen(arr)}.length()"
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
@@ -366,13 +377,13 @@ def codegen(node)
     "break;"
   when :integer
     val, = node
-    "#{val}" # @todo
+    "#{val}"
   when :string
     val, = node
-    "#{val}" # @todo
+    string_escape(val)
   when :reserved
-    val, = node
-    "#{val}" # @todo
+    word, = node
+    "#{word}"
   when :symbol
     val, = node
     if val == '=='
@@ -381,7 +392,7 @@ def codegen(node)
     "#{val}"
   when :identifier
     varname, = node
-    "#{varname}" # @todo
+    "#{varname}"
   else
     raise "iae: unrecognized node type: #{node_type}"
   end

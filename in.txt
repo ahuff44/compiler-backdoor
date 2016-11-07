@@ -1,3 +1,4 @@
-while (true) {
-  break;
-}
+set RESERVED = _array("true", "false", "set", "def", "if", "while", "print", "return", "break");
+set SYMBOLS = _array("+", "-", "*", "=", "<", ">", ";", "(", ",", "{", "}");
+set x = "\"";
+print x;
