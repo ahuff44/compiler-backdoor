@@ -1,4 +1,6 @@
 alloc x;
-let x = 1;
-let x = x*2;
+set x = 1;
+set x = x*2;
+set x = _array(1, 2, 3);
+set x = _include(x, 3);
 print x;
