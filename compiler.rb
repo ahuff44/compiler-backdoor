@@ -8,7 +8,7 @@
 #   end
 # end
 
-RESERVED = %w(true false alloc set def if while print)
+RESERVED = %w(true false set def if while print return)
 SYMBOLS = %w(+ - * = < > ; ( ) , { })
 
 def tokenize(text)
@@ -137,10 +137,6 @@ def parse_!(state, tokens)
       end
       ast << parse_!(:statement, tokens)
     end
-  when :alloc
-    target = next_token!(tokens) { |(type, val)| raise "bad set target #{val}" unless type == :identifier }
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
-    [:alloc, target]
   when :set
     target = next_token!(tokens) { |(type, val)| raise "bad set target #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '=': #{tok[1]}" unless tok == [:symbol, '='] }
@@ -258,13 +254,15 @@ def parse_!(state, tokens)
     cond = parse_!(:expression, tokens)
     body = parse_!(:scope, tokens)
     [:while, cond, body]
+  when :return
+    val = parse_!(:expression, tokens)
+    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    [:return, val]
   when :statement
     type, val = tok = next_token!(tokens)
     case type
     when :reserved
       case val
-      when "alloc"
-        parse_!(:alloc, tokens)
       when "set"
         parse_!(:set, tokens)
       when "print"
@@ -275,84 +273,78 @@ def parse_!(state, tokens)
         parse_!(:if, tokens)
       when "while"
         parse_!(:while, tokens)
+      when "return"
+        parse_!(:return, tokens)
       else
         raise "unknown reserved word: #{val}"
       end
     when nil
       raise "unexpected end of input"
     else
-      raise "unexpected statement starting at: #{val}"
+      raise "unexpected statement starting at: #{val}; tokens=#{tokens.reverse}"
     end
   else
     raise "unimplemented state: #{state}"
   end
 end
 
-def codegenlist(list, st, sep)
-  "#{list.map{|elem| codegen(elem, st)}.join(sep)}"
+def codegen_list(list, sep)
+  "#{list.map{|elem| codegen(elem)}.join(sep)}"
 end
 
 def generate_code(node)
-  codegen(node, %w(_array _include _push _pop))
+  codegen(node)
 end
 
-def codegen(node, st)
-  # st is a "symbol table"; it's an array of alloc'd strings
-  # p ["codegen", node, st]
-  if st.nil?
-    raise "iae: st is nil"
-  end
+def codegen(node)
+  p ["codegen", node]
 
   node_type = node.shift
   case node_type
   when :scope
     body, = node
-    st = st.clone
-    "#{body.map{|elem| codegen(elem, st)}.join("\n")}"
-  when :alloc
-    target, = node
-    varname = target[1]
-    raise "cannot re-allocate: #{varname}" if st.include?(varname)
-    st << varname
-    "let #{codegen(target, st)};"
+    "#{body.map{|elem| codegen(elem)}.join("\n")}"
   when :set
     target, rhs = node
-    "#{codegen(target, st)} = #{codegen(rhs, st)};"
+    "#{codegen(target)} = #{codegen(rhs)};"
   when :binop
     type, lhs, rhs = node
-    "(#{codegen(lhs, st)} #{codegen(type, st)} #{codegen(rhs, st)})"
+    "(#{codegen(lhs)} #{codegen(type)} #{codegen(rhs)})"
   when :call
     name_, args = node
-    name_str = codegen(name_, st)
+    name_str = codegen(name_)
     case name_str # shim in javascript methods
     when '_array'
-      "[#{codegenlist(args, st, ', ')}]"
+      "[#{codegen_list(args, ', ')}]"
     when '_include'
       arr, elem = args
-      "#{codegen(arr, st)}.includes(#{codegen(elem, st)})"
+      "#{codegen(arr)}.includes(#{codegen(elem)})"
     when '_push'
       arr, elem = args
-      "#{codegen(arr, st)}.push(#{codegen(elem, st)})"
+      "#{codegen(arr)}.push(#{codegen(elem)})"
     when '_pop'
       arr, elem = args
-      "#{codegen(arr, st)}.pop(#{codegen(elem, st)})"
+      "#{codegen(arr)}.pop(#{codegen(elem)})"
     else
-      "#{name_str}(#{codegenlist(args, st, ', ')})"
+      "#{name_str}(#{codegen_list(args, ', ')})"
     end
   when :print
     args, = node
-    codegen([:call, [:symbol, 'console.log'], args], st) + ";" # @hack
+    "console.log(#{codegen_list(args, ', ')});"
   when :def
     name_, params, body = node
-    "funcion #{codegen(name_, st)}(#{codegenlist(params, st, ', ')}) {\n#{codegen(body, st)}\n}"
+    "function #{codegen(name_)}(#{codegen_list(params, ', ')}) {\n#{codegen(body)}\n}"
   when :if
     cond, then_, else_ = node
-    fst = "if #{codegen(cond, st)} {\ncodegen(then_, st)\n}"
-    snd = if else_ then " else {\n#{codegen(else_, st)}\n}" else "" end
+    fst = "if #{codegen(cond)} {\n#{codegen(then_)}\n}"
+    snd = if else_ then " else {\n#{codegen(else_)}\n}" else "" end
     fst + snd
   when :while
     cond, body = node
-    "while (#{codegen(cond, st)}) {\n#{codegen(body, st)}\n}"
+    "while (#{codegen(cond)}) {\n#{codegen(body)}\n}"
+  when :return
+    val, = node
+    "return #{codegen(val)};"
   when :integer
     val, = node
     "#{val}" # @todo
@@ -370,7 +362,6 @@ def codegen(node, st)
     "#{val}"
   when :identifier
     varname, = node
-    raise "must allocate before use: #{varname}" unless st.include?(varname)
     "#{varname}" # @todo
   else
     raise "iae: unrecognized node type: #{node_type}"

@@ -1,6 +1,9 @@
-alloc x;
-set x = 1;
-set x = x*2;
-set x = _array(1, 2, 3);
-set x = _include(x, 3);
-print x;
+def fib(n) {
+  if (n < 2) {
+    return n;
+  } else {
+    return fib(n-1) + fib(n-2);
+  }
+}
+
+print fib(8);
