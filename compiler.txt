@@ -2,9 +2,13 @@ let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "re
 let SYMBOLS = _array("+", "-", "*", "=", "<", ">", ";", "(", ",", "{", "}");
 
 def tokenize(text) {
-
+  let state = "NONE";
+  let buffer = _array(2);
 }
 
-let x = _readFile("test.txt");
-print x;
-call _writeFile("test.txt", "you suck");
+let _ = _ARGV();
+let infile = _get(_, 0);
+let outfile = _get(_, 1);
+let text = _readFile(infile);
+call _print(text);
+# call _writeFile("test.txt", "you suck");

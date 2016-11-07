@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 
-RESERVED = %w(true false let def if while print return break call)
+RESERVED = %w(true false let def if while return break call)
 SYMBOLS = %w(+ - * = < > ; ( ) , { })
 
 def tokenize(text)
@@ -194,10 +194,6 @@ def parse_!(state, tokens)
     args = parse_!(:explist, tokens)
     next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
     [:call, name_, args]
-  when :print
-    args = parse_!(:explist, tokens)
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
-    [:print, args]
   when :explist
     if peek(tokens) == [:symbol, ")"]
       []
@@ -261,8 +257,6 @@ def parse_!(state, tokens)
       case val
       when "let"
         parse_!(:let, tokens)
-      when "print"
-        parse_!(:print, tokens)
       when "def"
         parse_!(:def, tokens)
       when "if"
@@ -363,12 +357,14 @@ def codegen(node)
     when '_writeFile'
       fname, data = args
       "require('fs').writeFileSync(#{codegen(fname)}, #{codegen(data)}, 'utf-8')"
+    when '_print'
+      val, = args
+      "console.log(#{codegen(val)});"
+    when '_ARGV'
+      "process.argv.slice(2)"
     else
       "#{name_str}(#{codegen_list(args, ', ')})"
     end
-  when :print
-    args, = node
-    "console.log(#{codegen_list(args, ', ')});"
   when :def
     name_, params, body = node
     "function #{codegen(name_)}(#{codegen_list(params, ', ')}) {\n#{codegen(body)}\n}"
