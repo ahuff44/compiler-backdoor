@@ -6,4 +6,4 @@ def fib(n) {
   }
 }
 
-print fib(8);
+print _get(x, 8);

@@ -297,7 +297,7 @@ def generate_code(node)
 end
 
 def codegen(node)
-  p ["codegen", node]
+  # p ["codegen", node]
 
   node_type = node.shift
   case node_type
@@ -325,6 +325,12 @@ def codegen(node)
     when '_pop'
       arr, elem = args
       "#{codegen(arr)}.pop(#{codegen(elem)})"
+    when '_map'
+      arr, fxn = args
+      "#{codegen(arr)}.map(#{codegen(fxn)})"
+    when '_get'
+      arr, ix = args
+      "#{codegen(arr)}[#{codegen(ix)}]"
     else
       "#{name_str}(#{codegen_list(args, ', ')})"
     end
