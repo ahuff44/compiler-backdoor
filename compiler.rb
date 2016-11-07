@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 
-RESERVED = %w(true false set def if while print return break)
+RESERVED = %w(true false let def if while print return break call)
 SYMBOLS = %w(+ - * = < > ; ( ) , { })
 
 def tokenize(text)
@@ -130,12 +130,12 @@ def parse_!(state, tokens)
       end
       ast << parse_!(:statement, tokens)
     end
-  when :set
-    target = next_token!(tokens) { |(type, val)| raise "bad set target #{val}" unless type == :identifier }
+  when :let
+    target = next_token!(tokens) { |(type, val)| raise "bad let target #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '=': #{tok[1]}" unless tok == [:symbol, '='] }
     rhs = parse_!(:expression, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
-    [:set, target, rhs]
+    [:let, target, rhs]
   when :expression
     type, val = tok = next_token!(tokens)
     case type
@@ -259,8 +259,8 @@ def parse_!(state, tokens)
     case type
     when :reserved
       case val
-      when "set"
-        parse_!(:set, tokens)
+      when "let"
+        parse_!(:let, tokens)
       when "print"
         parse_!(:print, tokens)
       when "def"
@@ -273,6 +273,10 @@ def parse_!(state, tokens)
         parse_!(:return, tokens)
       when "break"
         parse_!(:break, tokens)
+      when "call"
+        call = parse_!(:call, tokens)
+        next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+        call
       else
         raise "unknown reserved word: #{val}"
       end
@@ -317,7 +321,7 @@ def codegen(node)
   when :scope
     body, = node
     "#{body.map{|elem| codegen(elem)}.join("\n")}"
-  when :set
+  when :let
     target, rhs = node
     "#{codegen(target)} = #{codegen(rhs)};"
   when :binop
@@ -353,6 +357,12 @@ def codegen(node)
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
+    when '_readFile'
+      fname, = args
+      "require('fs').readFileSync(#{codegen(fname)}, 'utf-8')"
+    when '_writeFile'
+      fname, data = args
+      "require('fs').writeFileSync(#{codegen(fname)}, #{codegen(data)}, 'utf-8')"
     else
       "#{name_str}(#{codegen_list(args, ', ')})"
     end

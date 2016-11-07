@@ -1,0 +1,10 @@
+let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "call");
+let SYMBOLS = _array("+", "-", "*", "=", "<", ">", ";", "(", ",", "{", "}");
+
+def tokenize(text) {
+
+}
+
+let x = _readFile("test.txt");
+print x;
+call _writeFile("test.txt", "you suck");
