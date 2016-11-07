@@ -1,9 +1,3 @@
-def fib(n) {
-  if (n < 2) {
-    return n;
-  } else {
-    return fib(n-1) + fib(n-2);
-  }
+while (true) {
+  break;
 }
-
-print _get(x, 8);

@@ -8,7 +8,7 @@
 #   end
 # end
 
-RESERVED = %w(true false set def if while print return)
+RESERVED = %w(true false set def if while print return break)
 SYMBOLS = %w(+ - * = < > ; ( ) , { })
 
 def tokenize(text)
@@ -258,6 +258,9 @@ def parse_!(state, tokens)
     val = parse_!(:expression, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
     [:return, val]
+  when :break
+    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    [:break]
   when :statement
     type, val = tok = next_token!(tokens)
     case type
@@ -275,6 +278,8 @@ def parse_!(state, tokens)
         parse_!(:while, tokens)
       when "return"
         parse_!(:return, tokens)
+      when "break"
+        parse_!(:break, tokens)
       else
         raise "unknown reserved word: #{val}"
       end
@@ -288,12 +293,12 @@ def parse_!(state, tokens)
   end
 end
 
-def codegen_list(list, sep)
-  "#{list.map{|elem| codegen(elem)}.join(sep)}"
-end
-
 def generate_code(node)
   codegen(node)
+end
+
+def codegen_list(list, sep)
+  "#{list.map{|elem| codegen(elem)}.join(sep)}"
 end
 
 def codegen(node)
@@ -325,9 +330,15 @@ def codegen(node)
     when '_pop'
       arr, elem = args
       "#{codegen(arr)}.pop(#{codegen(elem)})"
+    when '_shift'
+      arr, elem = args
+      "#{codegen(arr)}.shift(#{codegen(elem)})"
     when '_map'
       arr, fxn = args
       "#{codegen(arr)}.map(#{codegen(fxn)})"
+    when '_join'
+      arr, sep = args
+      "#{codegen(arr)}.join(#{codegen(sep)})"
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
@@ -351,6 +362,8 @@ def codegen(node)
   when :return
     val, = node
     "return #{codegen(val)};"
+  when :break
+    "break;"
   when :integer
     val, = node
     "#{val}" # @todo
