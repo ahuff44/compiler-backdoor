@@ -1,11 +1,4 @@
+alloc x;
 let x = 1;
-let x = 1+2;
-let x = (1+2);
-let x = f(1);
-let x = f(1, 2);
-let x = f(1, 2) + 1;
-# print 1, x, f(5,4);
-# def f(x) {
-# 	let y = x*2;
-# 	print y;
-# }
+let x = x*2;
+print x;

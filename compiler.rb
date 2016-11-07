@@ -1,11 +1,15 @@
 #!/usr/bin/env ruby
 
 
-def preprocess(text)
-  text
-  #   .gsub(/#.*$/, '')
-  #   .gsub(/\s+/, ' ')
-end
+# Token = Struct.new(:type, :val) do
+#   def initialize
+#     raise "iae: bad token: #{self}" unless token_types
+#     super
+#   end
+# end
+
+RESERVED = %w(true false alloc let def if while print)
+SYMBOLS = %w(+ - * = < > ; ( ) , { })
 
 def tokenize(text)
   # tokenize :: String -> [ Token ]
@@ -14,6 +18,7 @@ def tokenize(text)
   #   | (:symbol, String)
   #   | (:identifier, String)
   #   | (:string, String)
+  #   | (:reserved, String)
 
   state = :none
   buffer = []
@@ -42,6 +47,8 @@ def tokenize(text)
           "\\"
         when "\""
           "\""
+        else
+          char
         end
       state = :string
     when :integer
@@ -59,7 +66,12 @@ def tokenize(text)
       if char =~ /[_a-zA-Z0-9]/
         buffer << char
       else
-        tokens << [state, buffer.join]
+        val = buffer.join
+        if RESERVED.include?(val)
+          tokens << [:reserved, val]
+        else
+          tokens << [state, val]
+        end
         state = :none
         redo # re-process this character; e.g. "+" in "3+4"
       end
@@ -80,7 +92,7 @@ def tokenize(text)
         state = :identifier
         buffer.clear
         redo
-      when /[\+\-\*\=\;\(\)\,\{\}]/
+      when ->(c) { SYMBOLS.include? c }
         state = :symbol
         buffer.clear
         redo
@@ -95,7 +107,7 @@ end
 
 def parse(tokens)
   tokens = [[:symbol, '{']] + tokens + [[:symbol, '}']] # sigil for parsing a scope
-  tokens = tokens.reverse # makes token.pop easier
+  tokens = tokens.reverse # makes next_token! etc easier
   parse_!(:scope, tokens)
 end
 
@@ -107,6 +119,10 @@ def next_token!(tokens)
   tok
 end
 
+def peek(tokens)
+  tokens.last
+end
+
 def parse_!(state, tokens)
   # p ['parse_!', state, tokens.reverse]
 
@@ -115,17 +131,21 @@ def parse_!(state, tokens)
     next_token!(tokens) { |tok| raise "scope missing '{': #{tok[1]}" unless tok == [:symbol, '{'] }
     ast = []
     loop do
-      if tokens.last == [:symbol, "}"] # peek
+      if peek(tokens) == [:symbol, "}"]
         next_token!(tokens)
-        return ast
+        return [:scope, ast]
       end
       ast << parse_!(:statement, tokens)
     end
+  when :alloc
+    target = next_token!(tokens) { |(type, val)| raise "bad let target #{val}" unless type == :identifier }
+    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    [:alloc, target]
   when :let
     target = next_token!(tokens) { |(type, val)| raise "bad let target #{val}" unless type == :identifier }
-    next_token!(tokens) { |tok| raise "missing assignment operator: #{tok[1]}" unless tok == [:symbol, '='] }
+    next_token!(tokens) { |tok| raise "missing '=': #{tok[1]}" unless tok == [:symbol, '='] }
     rhs = parse_!(:expression, tokens)
-    next_token!(tokens) { |tok| raise "missing semicolon: #{tok[1]}" unless tok == [:symbol, ';'] }
+    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
     [:let, target, rhs]
   when :expression
     type, val = tok = next_token!(tokens)
@@ -134,8 +154,11 @@ def parse_!(state, tokens)
       lhs = tok
     when :integer
       lhs = tok
+    when :reserved
+      raise "reserved word in expression: #{val}" unless val == 'true' or val == 'false'
+      lhs = tok
     when :identifier
-      type2, val2 = tok2 = tokens.last # peek
+      type2, val2 = tok2 = peek(tokens)
       if tok2 == [:symbol, '(']
         tokens << tok # put func name back
         lhs = parse_!(:call, tokens)
@@ -147,7 +170,11 @@ def parse_!(state, tokens)
         lhs = parse_!(:expression, tokens)
         next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
       end
+    else
+      raise "iae"
     end
+
+    # p ['lhs', lhs, tokens.reverse]
 
     type, val = tok = next_token!(tokens)
     if type == :symbol
@@ -158,6 +185,13 @@ def parse_!(state, tokens)
         [:binop, tok, lhs, parse_!(:expression, tokens)]
       when '*'
         [:binop, tok, lhs, parse_!(:expression, tokens)]
+      when '<'
+        [:binop, tok, lhs, parse_!(:expression, tokens)]
+      when '>'
+        [:binop, tok, lhs, parse_!(:expression, tokens)]
+      when '='
+        next_token!(tokens) { |tok| raise "unexpected '=': #{tok[1]}" unless tok == [:symbol, '='] }
+        [:binop, [:symbol, '=='], lhs, parse_!(:expression, tokens)]
       else # e.g. ')', ';', or ','
         tokens << tok # put it back
         lhs
@@ -168,15 +202,15 @@ def parse_!(state, tokens)
   when :call
     name_ = next_token!(tokens) { |type, val| raise "bad call name: #{name_}: #{tok[1]}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
-    params = parse_!(:explist, tokens)
+    args = parse_!(:explist, tokens)
     next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
-    [:call, name_, params]
+    [:call, name_, args]
   when :print
-    params = parse_!(:explist, tokens)
-    next_token!(tokens) { |tok| raise "missing semicolon: #{tok[1]}" unless tok == [:symbol, ';'] }
-    [:print, params]
+    args = parse_!(:explist, tokens)
+    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    [:print, args]
   when :explist
-    if tokens.last == [:symbol, ")"] # peek
+    if peek(tokens) == [:symbol, ")"]
       []
     else
       buffer = []
@@ -190,7 +224,7 @@ def parse_!(state, tokens)
       end
     end
   when :arglist
-    if tokens.last == [:symbol, ")"] # peek
+    if peek(tokens) == [:symbol, ")"]
       []
     else
       buffer = []
@@ -206,26 +240,31 @@ def parse_!(state, tokens)
   when :def
     name_ = next_token!(tokens) { |(type, val)| raise "bad function name: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "def '#{name_[1]}' missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
-    args = parse_!(:arglist, tokens)
+    params = parse_!(:arglist, tokens)
     next_token!(tokens) { |tok| raise "def '#{name_[1]}' missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
     body = parse_!(:scope, tokens)
-    [:def, name_, args, body]
+    [:def, name_, params, body]
   when :if
+    next_token!(tokens) { |tok| raise "'if' missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
     cond = parse_!(:expression, tokens)
-    then_ =
-    else_ =
+    next_token!(tokens) { |tok| raise "'if' missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+    then_ = parse_!(:scope, tokens)
+    if peek(tokens) == [:identifier, 'else']
+      next_token!(tokens) # consume 'else'
+      else_ = parse_!(:scope, tokens)
+    end
     [:if, cond, then_, else_]
+  when :while
+    cond = parse_!(:expression, tokens)
+    body = parse_!(:scope, tokens)
+    [:while, cond, body]
   when :statement
     type, val = tok = next_token!(tokens)
     case type
-    when :string
-      raise "unexpected statement starting at: #{val}"
-    when :integer
-      raise "unexpected statement starting at: #{val}"
-    when :symbol
-      raise "unexpected statement starting at: #{val}"
-    when :identifier
+    when :reserved
       case val
+      when "alloc"
+        parse_!(:alloc, tokens)
       when "let"
         parse_!(:let, tokens)
       when "print"
@@ -234,31 +273,89 @@ def parse_!(state, tokens)
         parse_!(:def, tokens)
       when "if"
         parse_!(:if, tokens)
-      when "for"
-        parse_!(:for, tokens)
+      when "while"
+        parse_!(:while, tokens)
       else
-        tok
+        raise "unknown reserved word: #{val}"
       end
     when nil
       raise "unexpected end of input"
+    else
+      raise "unexpected statement starting at: #{val}"
     end
   else
     raise "unimplemented state: #{state}"
   end
 end
 
-def generate_code(ast)
-  ast
+def codegen_list(list, sep)
+  "#{list.map{|elem| codegen(elem)}.join(sep)}"
+end
+
+def codegen(node)
+  # p ["codegen", node]
+
+  node_type = node.shift
+  case node_type
+  when :scope
+    body, = node
+    "#{body.map{|elem| codegen(elem)}.join("\n")}"
+  when :alloc
+    target, = node
+    "let #{codegen(target)};"
+  when :let
+    target, rhs = node
+    "#{target[1]} = #{codegen(rhs)};"
+  when :binop
+    type, lhs, rhs = node
+    "(#{codegen(lhs)} #{codegen(type)} #{codegen(rhs)})"
+  when :call
+    name_, args = node
+    "#{codegen(name_)}(#{codegen_list(args, ', ')})"
+  when :print
+    args, = node
+    codegen([:call, [:symbol, 'console.log'], args]) + ";" # @hack
+  when :def
+    name_, params, body = node
+    "funcion #{codegen(name_)}(#{codegen_list(params, ', ')}) {\n#{codegen(body)}\n}"
+  when :if
+    cond, then_, else_ = node
+    fst = "if #{codegen(cond)} {\ncodegen(then_)\n}"
+    snd = if else_ then " else {\n#{codegen(else_)}\n}" else "" end
+    fst + snd
+  when :while
+    cond, body = node
+    "while (#{codegen(cond)}) {\n#{codegen(body)}\n}"
+  when :integer
+    val, = node
+    "#{val}" # @todo
+  when :string
+    val, = node
+    "#{val}" # @todo
+  when :reserved
+    val, = node
+    "#{val}" # @todo
+  when :symbol
+    val, = node
+    if val == '=='
+      val = '==='
+    end
+    "#{val}"
+  when :identifier
+    val, = node
+    "#{val}" # @todo
+  else
+    raise "iae: unrecognized node type: #{node_type}"
+  end
 end
 
 infile, outfile = ARGV
 text = File.read(infile)
 # puts "\ntext loaded:\n#{text}"
-text = preprocess(text)
-# puts "\ntext preprocessed:\n#{text}"
 tokens = tokenize(text)
 # puts "\ntokens:\n#{tokens}"
 ast = parse(tokens)
-puts "\nast:\n#{ast}"
-code = generate_code(ast)
+# puts "\nast:\n#{ast}"
+code = codegen(ast)
 # puts "\ncode:\n#{code}"
+File.write(outfile, code)
