@@ -2,7 +2,9 @@
 
 
 RESERVED = %w(true false let def if while return break call do raise)
-SYMBOLS = %w(+ - * ! = < > ; ( ) , { } | &)
+SYNTAX = %w(= ; ( ) , { })
+BINOPS = %w(+ - * == != < > <= >= || &&)
+ALL_SYMBOLS = SYNTAX + BINOPS
 
 def tokenize(text)
   # tokenize :: String -> [ Token ]
@@ -55,8 +57,23 @@ def tokenize(text)
         redo
       end
     when :symbol
-      tokens << [state, char]
-      state = :none
+      if ALL_SYMBOLS.any? { |sym| sym.include?(char) }
+        buffer << char
+      else
+        while !buffer.empty?
+          # p ['buffer', buffer]
+          valid_prefixes = ALL_SYMBOLS.select { |sym| buffer.join.start_with?(sym) }.sort_by(&:length)
+          if valid_prefixes.empty?
+            raise "unrecognized symbols: #{buf}"
+          end
+
+          to_push = valid_prefixes.last # longest valid prefix
+          tokens << [state, to_push]
+          buffer.shift(to_push.length) # remove consumed chars from the buffer
+        end
+        state = :none
+        redo
+      end
     when :identifier
       if char =~ /[_a-zA-Z0-9]/
         buffer << char
@@ -87,12 +104,10 @@ def tokenize(text)
         state = :identifier
         buffer.clear
         redo
-      when ->(c) { SYMBOLS.include?(c) }
-        state = :symbol
-        buffer.clear # not currently necessary; will be later for multi-character symbols
-        redo
       else
-        raise "unrecognized character: #{char}"
+        state = :symbol
+        buffer.clear
+        redo
       end
     else
       raise "iae: illegal state: #{state}"
@@ -171,29 +186,8 @@ def parse_!(state, tokens)
 
     type, val = tok = next_token!(tokens)
     if type == :symbol
-      case val
-      when '+'
+      if BINOPS.include?(val)
         [:binop, tok, lhs, parse_!(:expression, tokens)]
-      when '-'
-        [:binop, tok, lhs, parse_!(:expression, tokens)]
-      when '*'
-        [:binop, tok, lhs, parse_!(:expression, tokens)]
-      when '<'
-        [:binop, tok, lhs, parse_!(:expression, tokens)]
-      when '>'
-        [:binop, tok, lhs, parse_!(:expression, tokens)]
-      when '='
-        next_token!(tokens) { |tok| raise "expected '='; got #{tok[1]}" unless tok == [:symbol, '='] }
-        [:binop, [:symbol, '=='], lhs, parse_!(:expression, tokens)]
-      when '!'
-        next_token!(tokens) { |tok| raise "expected '='; got #{tok[1]}" unless tok == [:symbol, '='] }
-        [:binop, [:symbol, '!='], lhs, parse_!(:expression, tokens)]
-      when '&'
-        next_token!(tokens) { |tok| raise "expected '&'; got #{tok[1]}" unless tok == [:symbol, '&'] }
-        [:binop, [:symbol, '&&'], lhs, parse_!(:expression, tokens)]
-      when '|'
-        next_token!(tokens) { |tok| raise "expected '|'; got #{tok[1]}" unless tok == [:symbol, '|'] }
-        [:binop, [:symbol, '||'], lhs, parse_!(:expression, tokens)]
       else # e.g. ')', ';', or ','
         tokens << tok # put it back
         lhs
@@ -465,7 +459,7 @@ infile, outfile = ARGV
 text = File.read(infile)
 # puts "\ntext loaded:\n#{text}"
 tokens = tokenize(text)
-File.write("ahuff/main_tokens.txt", _tokens_to_string(tokens))
+File.write("ahuff/main_tokens.txt", _tokens_to_string(tokens)) # @debug
 # puts "\ntokens:\n#{tokens}"
 ast = parse(tokens)
 # puts "\nast:\n#{ast}"
