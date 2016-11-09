@@ -6,6 +6,8 @@ let x = f();
 let x = f(1);
 let x = f(1, 2);
 let x = f(1, 2) + 1;
+let x = (3 == 4);
+let x = (2 <=(2));
 do _print(1);
 do _print(x);
 do _print(f(5, 4));

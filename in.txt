@@ -1,1 +1,4 @@
+let x = 0;
 let x = (z ==(0));
+# ["lhs", [:integer, "0"], [[:symbol, ";"], [:symbol, "}"]]]
+

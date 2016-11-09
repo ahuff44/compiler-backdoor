@@ -1,5 +1,7 @@
 let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "call", "do", "raise");
-let SYMBOLS = _array("+", "-", "*", "!", "=", "<", ">", ";", "(", ")", ",", "{", "}", "|", "&");
+let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}");
+let BINOPS = _array("+", "-", "*", "==", "!=", "<", ">", "<=", ">=", "||", "&&");
+let ALL_SYMBOLS = _concat(SYNTAX, BINOPS);
 
 let DIGITS = _array("0","1","2","3","4","5","6","7","8","9");
 let LOWERCASE = _array("a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z");
@@ -45,8 +47,49 @@ def tokenize(text) {
         let ix1 = ix1 - 1; # redo
       }
     } else if (state == "SYMBOL") {
-      do _push(tokens, _array(state, char));
-      let state = "NONE";
+      def is_relevant_symbol(sym) {
+        return _include(sym, char);
+      }
+      def validity_filter(sym) {
+        # checks whether sym is a prefix of buffer
+        let ix2 = 0;
+        while (ix2 < _length(sym)) {
+          let cbuf = _get(buffer, ix2);
+          let sbuf = _get(sym, ix2);
+          if (cbuf != sbuf) {
+            return false;
+          }
+          let ix2 = ix2 + 1;
+        }
+        return true;
+      }
+      def by_length(s1, s2) {
+        return _length(s1) > _length(s2);
+      }
+
+      if (_any(ALL_SYMBOLS, is_relevant_symbol)) {
+        do _push(buffer, char);
+      } else {
+        while (_length(buffer) != 0) {
+          # do _print(_array("buffer", buffer));
+          let valid_prefixes = _sort(_filter(ALL_SYMBOLS, validity_filter), by_length);
+          if (_length(valid_prefixes) == 0) {
+            raise "unrecognized symbols: " + _join(buffer, "");
+          }
+
+          let to_push = _pop(valid_prefixes);
+          do _push(tokens, _array(state, to_push));
+
+          # buffer.shuft(to_push.length)
+          let ix3 = 0;
+          while (ix3 < _length(to_push)) {
+            do _leftpop(buffer);
+            let ix3 = ix3 + 1;
+          }
+        }
+        let state = "NONE";
+        let ix1 = ix1 - 1; # redo
+      }
     } else if (state == "IDENTIFIER") {
       if ((char == "_") || _include(DIGITS, char) || _include(LOWERCASE, char) || _include(UPPERCASE, char)) {
         do _push(buffer, char);
@@ -76,12 +119,10 @@ def tokenize(text) {
         let state = "IDENTIFIER";
         let buffer = _array();
         let ix1 = ix1 - 1; # redo
-      } else if (_include(SYMBOLS, char)) {
+      } else {
         let state = "SYMBOL";
         let buffer = _array();
         let ix1 = ix1 - 1; # redo
-      } else {
-        raise "unrecognized character: " + char;
       }
     } else {
       raise "iae: illegal state: " + state;

@@ -64,7 +64,7 @@ def tokenize(text)
           # p ['buffer', buffer]
           valid_prefixes = ALL_SYMBOLS.select { |sym| buffer.join.start_with?(sym) }.sort_by(&:length)
           if valid_prefixes.empty?
-            raise "unrecognized symbols: #{buf}"
+            raise "unrecognized symbols: #{buffer.join}"
           end
 
           to_push = valid_prefixes.last # longest valid prefix
@@ -358,14 +358,23 @@ def codegen(node)
       arr, elem = args
       "#{codegen(arr)}.push(#{codegen(elem)})"
     when '_pop'
-      arr, elem = args
-      "#{codegen(arr)}.pop(#{codegen(elem)})"
-    when '_shift'
-      arr, elem = args
-      "#{codegen(arr)}.shift(#{codegen(elem)})"
+      arr, = args
+      "#{codegen(arr)}.pop()"
+    when '_leftpop'
+      arr, = args
+      "#{codegen(arr)}.splice(0,1)[0]"
     when '_map'
       arr, fxn = args
       "#{codegen(arr)}.map(#{codegen(fxn)})"
+    when '_filter'
+      arr, fxn = args
+      "#{codegen(arr)}.filter(#{codegen(fxn)})"
+    when '_any'
+      arr, fxn = args
+      "#{codegen(arr)}.some(#{codegen(fxn)})"
+    when '_sort'
+      arr, fxn = args
+      "#{codegen(arr)}.sort(#{codegen(fxn)})"
     when '_join'
       arr, sep = args
       if sep.nil?
@@ -378,6 +387,9 @@ def codegen(node)
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
+    when '_concat'
+      arr1, arr2 = args
+      "#{codegen(arr1)}.concat(#{codegen(arr2)})"
     when '_readFile'
       fname, = args
       "require('fs').readFileSync(#{codegen(fname)}, 'utf-8')"
