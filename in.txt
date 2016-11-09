@@ -1,4 +1,2 @@
-let x = 0;
-let x = (z ==(0));
-# ["lhs", [:integer, "0"], [[:symbol, ";"], [:symbol, "}"]]]
-
+let x = arra.ypush(3);
+let valid_prefixes = ALL_SYMBOLS.filter(validity_filter).sort(by_length);

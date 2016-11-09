@@ -6,6 +6,10 @@ SYNTAX = %w(= ; ( ) , { })
 BINOPS = %w(+ - * == != < > <= >= || &&)
 ALL_SYMBOLS = SYNTAX + BINOPS
 
+def is_symbol_character(char)
+  ALL_SYMBOLS.any? { |sym| sym.include?(char) }
+end
+
 def tokenize(text)
   # tokenize :: String -> [ Token ]
   # Token
@@ -17,8 +21,10 @@ def tokenize(text)
 
   state = :none
   buffer = []
-  text.chars.each_with_object([]) do |char, tokens|
-    # p [char, state, buffer]
+  chars = text.chars
+  chars << " " # extra char to allow buffers to clear
+  chars.each_with_object([]) do |char, tokens|
+    # p ["tokenize", char, state, buffer]
 
     case state
     when :comment
@@ -57,7 +63,7 @@ def tokenize(text)
         redo
       end
     when :symbol
-      if ALL_SYMBOLS.any? { |sym| sym.include?(char) }
+      if is_symbol_character(char)
         buffer << char
       else
         while !buffer.empty?
@@ -75,7 +81,7 @@ def tokenize(text)
         redo
       end
     when :identifier
-      if char =~ /[_a-zA-Z0-9]/
+      if char =~ /[\._a-zA-Z0-9]/ # @hack: allow node methods like array.push by treating '.' as a \w character
         buffer << char
       else
         val = buffer.join
@@ -104,10 +110,12 @@ def tokenize(text)
         state = :identifier
         buffer.clear
         redo
-      else
+      when ->(c){is_symbol_character(c)}
         state = :symbol
         buffer.clear
         redo
+      else
+        raise "unrecognized character: #{char}"
       end
     else
       raise "iae: illegal state: #{state}"
@@ -351,45 +359,15 @@ def codegen(node)
     case name_str # shim in javascript methods
     when '_array'
       "[#{codegen_list(args, ', ')}]"
-    when '_include'
-      arr, elem = args
-      "#{codegen(arr)}.includes(#{codegen(elem)})"
-    when '_push'
-      arr, elem = args
-      "#{codegen(arr)}.push(#{codegen(elem)})"
-    when '_pop'
-      arr, = args
-      "#{codegen(arr)}.pop()"
     when '_leftpop'
       arr, = args
       "#{codegen(arr)}.splice(0,1)[0]"
-    when '_map'
-      arr, fxn = args
-      "#{codegen(arr)}.map(#{codegen(fxn)})"
-    when '_filter'
-      arr, fxn = args
-      "#{codegen(arr)}.filter(#{codegen(fxn)})"
     when '_any'
       arr, fxn = args
       "#{codegen(arr)}.some(#{codegen(fxn)})"
-    when '_sort'
-      arr, fxn = args
-      "#{codegen(arr)}.sort(#{codegen(fxn)})"
-    when '_join'
-      arr, sep = args
-      if sep.nil?
-        raise "_join takes 2 args; got #{args.length}: #{args}";
-      end
-      "#{codegen(arr)}.join(#{codegen(sep)})"
-    when '_length'
-      arr, = args
-      "#{codegen(arr)}.length"
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
-    when '_concat'
-      arr1, arr2 = args
-      "#{codegen(arr1)}.concat(#{codegen(arr2)})"
     when '_readFile'
       fname, = args
       "require('fs').readFileSync(#{codegen(fname)}, 'utf-8')"
