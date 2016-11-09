@@ -1,1 +1,1 @@
-call _writeFile("test.txt", "hello");
+let x = 0;

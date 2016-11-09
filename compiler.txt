@@ -1,14 +1,110 @@
-let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "call");
-let SYMBOLS = _array("+", "-", "*", "=", "<", ">", ";", "(", ",", "{", "}");
+let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "call", "do", "raise");
+let SYMBOLS = _array("+", "-", "*", "!", "=", "<", ">", ";", "(", ")", ",", "{", "}", "|", "&");
+
+let DIGITS = _array("0","1","2","3","4","5","6","7","8","9");
+let LOWERCASE = _array("a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z");
+let UPPERCASE = _array("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z");
 
 def tokenize(text) {
   let state = "NONE";
-  let buffer = _array(2);
+  let buffer = _array();
+
+  let tokens = _array();
+  let ix1 = 0;
+  while (ix1 < _length(text)) {
+    let char = _get(text, ix1);
+    # do _print(_array(ix1, char, state));
+    if (state == "COMMENT") {
+      if (char == "\n") {
+        let state = "NONE";
+      }
+    } else if (state == "STRING") {
+      if (char == "\\") {
+        let state = "ESCAPE_CHAR";
+      } else if (char != "\"") {
+        do _push(buffer, char);
+      } else {
+        do _push(tokens, _array(state, _join(buffer, "")));
+        let state = "NONE";
+      }
+    } else if (state == "ESCAPE_CHAR") {
+      let to_push = char;
+      if (char == "n") {
+        let to_push = "\n";
+      } else if (char == "t") {
+        let to_push = "\t";
+      }
+      do _push(buffer, to_push);
+      let state = "STRING";
+    } else if (state == "INTEGER") {
+      if (_include(DIGITS, char)) {
+        do _push(buffer, char);
+      } else {
+        do _push(tokens, _array(state, _join(buffer, "")));
+        let state = "NONE";
+        let ix1 = ix1 - 1; # redo
+      }
+    } else if (state == "SYMBOL") {
+      do _push(tokens, _array(state, char));
+      let state = "NONE";
+    } else if (state == "IDENTIFIER") {
+      if ((char == "_") || _include(DIGITS, char) || _include(LOWERCASE, char) || _include(UPPERCASE, char)) {
+        do _push(buffer, char);
+      } else {
+        let val = _join(buffer, "");
+        if (_include(RESERVED, val)) {
+          do _push(tokens, _array("RESERVED", val));
+        } else {
+          do _push(tokens, _array(state, val));
+        }
+        let state = "NONE";
+        let ix1 = ix1 - 1; # redo
+      }
+    } else if (state == "NONE") {
+      if ((char == " ") || (char == "\t") || (char == "\n")) {
+        # no-op
+      } else if (char == "#") {
+        let state = "COMMENT";
+      } else if (char == "\"") {
+        let state = "STRING";
+        let buffer = _array();
+      } else if (_include(DIGITS, char)) {
+        let state = "INTEGER";
+        let buffer = _array();
+        let ix1 = ix1 - 1; # redo
+      } else if ((char == "_") || _include(LOWERCASE, char) || _include(UPPERCASE, char)) {
+        let state = "IDENTIFIER";
+        let buffer = _array();
+        let ix1 = ix1 - 1; # redo
+      } else if (_include(SYMBOLS, char)) {
+        let state = "SYMBOL";
+        let buffer = _array();
+        let ix1 = ix1 - 1; # redo
+      } else {
+        raise "unrecognized character: " + char;
+      }
+    } else {
+      raise "iae: illegal state: " + state;
+    }
+    let ix1 = ix1 + 1;
+  }
+  return tokens;
+}
+
+def parse(tokens) {
+  return tokens;
+}
+
+def generate_code(tokens) {
+  return tokens;
 }
 
 let _ = _ARGV();
 let infile = _get(_, 0);
 let outfile = _get(_, 1);
 let text = _readFile(infile);
-call _print(text);
-# call _writeFile("test.txt", "you suck");
+let tokens = tokenize(text);
+do _writeFile("ahuff/boot_tokens.txt", _inspect(tokens));
+let ast = parse(tokens);
+let code = generate_code(ast);
+do _writeFile(outfile, code);

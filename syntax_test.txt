@@ -6,19 +6,21 @@ let x = f();
 let x = f(1);
 let x = f(1, 2);
 let x = f(1, 2) + 1;
-print 1, x, f(5,4);
+do _print(1);
+do _print(x);
+do _print(f(5, 4));
 if (x == 2) {
-  print 3;
+  do _print(3);
   let x = 2;
 } else {
-  print 4;
+  do _print(4);
 }
-if (3==f(2)) {print 2;}
+if (3==f(2)) {do _print(2);}
 while (true) {
-  print 2;
-  print 3;
+  do _print(2);
+  do _print(3);
 }
 def f(x) {
   let y = x*2;
-  print y;
+  do _print(y);
 }
