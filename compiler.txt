@@ -141,11 +141,11 @@ def tokenize(text) {
 }
 
 def parse_entrypoint(tokens) {
-  let prefix = _array(_array("symbol", "{"));
+  let prefix = _array(_array("SYMBOL", "{"));
   let tokens = prefix.concat(tokens);
-  do tokens.push(_array("symbol", "}"));
+  do tokens.push(_array("SYMBOL", "}"));
   do tokens.reverse(); # convinient for next_token_ etc
-  let ast = parse_("scope", tokens);
+  let ast = parse_("SCOPE", tokens);
   if (false && (tokens.length != 0)) { # @todo re-add
     raise "trailing tokens";
   } else {
@@ -168,64 +168,64 @@ def tok_eq(tok1, sym, val) {
 def parse_(state, tokens) {
   # do _print(_array("parse_", state, peek(tokens)));
 
-  if (state == "scope") {
+  if (state == "SCOPE") {
     let tok = next_token_(tokens);
-    if (false == tok_eq(tok, "symbol", "{")) {
+    if (false == tok_eq(tok, "SYMBOL", "{")) {
       raise "scope missing '{': " + _get(tok, 1);
     }
     let ast = _array();
     while (true) {
-      if (tok_eq(peek(tokens), "symbol", "}")) {
+      if (tok_eq(peek(tokens), "SYMBOL", "}")) {
         do next_token_(tokens);
-        return _array("scope", ast);
+        return _array("SCOPE", ast);
       }
-      do ast.push(parse_("statement", tokens));
+      do ast.push(parse_("STATEMENT", tokens));
     }
-  } else if (state == "let") {
+  } else if (state == "LET") {
     let target = next_token_(tokens);
-    if (false == (_get(tok, 0) == "identifier")) {
+    if (false == (_get(tok, 0) == "IDENTIFIER")) {
       raise "bad let target " + _get(tok, 1);
     }
 
     let tok = next_token_(tokens);
-    if (false == tok_eq(tok, "symbol", "=")) {
+    if (false == tok_eq(tok, "SYMBOL", "=")) {
       raise "missing '=': " + _get(tok, 1);
     }
 
-    let rhs = parse_("expression", tokens);
+    let rhs = parse_("EXPRESSION", tokens);
 
     let tok = next_token_(tokens);
-    if (false == tok_eq(tok, "symbol", ";")) {
+    if (false == tok_eq(tok, "SYMBOL", ";")) {
       raise "missing ';': " + _get(tok, 1);
     }
 
-    return _array("let", target, rhs);
-  } else if (state == "expression") {
+    return _array("LET", target, rhs);
+  } else if (state == "EXPRESSION") {
     let tok = next_token_(tokens);
     let type = _get(tok, 0);
     let val = _get(tok, 1);
-    if (type == "string") {
+    if (type == "STRING") {
       let lhs = tok;
-    } else if (type == "integer") {
+    } else if (type == "INTEGER") {
       let lhs = tok;
-    } else if (type == "reserved") {
+    } else if (type == "RESERVED") {
       if (false == ((val == "true") || (val == "false"))) {
         raise "reserved word in expression: " + val;
       }
       let lhs = tok;
-    } else if (type == "identifier") {
+    } else if (type == "IDENTIFIER") {
       let tok2 = peek(tokens);
-      if (tok_eq(tok2, "symbol", "(")) {
+      if (tok_eq(tok2, "SYMBOL", "(")) {
         do tokens.push(tok); # put func name back
-        let lhs = parse_("call", tokens);
+        let lhs = parse_("CALL", tokens);
       } else {
         let lhs = tok;
       }
-    } else if (type == "symbol") {
-      if (tok_eq(tok, "symbol", "(")) {
-        let lhs = parse_("expression", tokens);
+    } else if (type == "SYMBOL") {
+      if (tok_eq(tok, "SYMBOL", "(")) {
+        let lhs = parse_("EXPRESSION", tokens);
         let paren_tok = next_token_(tokens);
-        if (false == tok_eq(paren_tok, "symbol", ")")) {
+        if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
           raise "missing ')': " + _get(paren_tok, 1);
         }
       }
@@ -238,9 +238,9 @@ def parse_(state, tokens) {
     let tok = next_token_(tokens);
     let type = _get(tok, 0);
     let val = _get(tok, 1);
-    if (type == "symbol") {
+    if (type == "SYMBOL") {
       if (BINPOS.includes(val)) {
-        return _array("binop", tok, lhs, parse_("expression", tokens));
+        return _array("BINOP", tok, lhs, parse_("EXPRESSION", tokens));
       } else { # e.g. ')', ';', or ','
         do tokens.push(tok); # put it back
         return lhs;
@@ -248,69 +248,69 @@ def parse_(state, tokens) {
     } else {
       raise "bad expression " + val;
     }
-  } else if (state == "call") {
+  } else if (state == "CALL") {
     let name_ = next_token_(tokens);
-    if (_get(name_, 0) != "identifier") {
+    if (_get(name_, 0) != "IDENTIFIER") {
       raise "bad call name: " + _get(name_, 1);
     }
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "symbol", "(")) {
+    if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
       raise "missing '(': " + _get(paren_tok, 1);
     }
 
-    let args = parse_("explist", tokens);
+    let args = parse_("EXPLIST", tokens);
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "symbol", ")")) {
+    if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
       raise "missing ')': " + _get(paren_tok, 1);
     }
 
-    return _array("call", name_, args);
-  } else if (state == "do") {
-    let call = parse_("call", tokens);
+    return _array("CALL", name_, args);
+  } else if (state == "DO") {
+    let call = parse_("CALL", tokens);
 
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "symbol", ";")) {
+    if (false == tok_eq(paren_tok, "SYMBOL", ";")) {
       raise "missing ';': " + _get(semi_tok, 1);
     }
 
-    return _array("do", call);
-  } else if (state == "explist") {
-    if (tok_eq(peek(tokens), "symbol", ")")) {
+    return _array("DO", call);
+  } else if (state == "EXPLIST") {
+    if (tok_eq(peek(tokens), "SYMBOL", ")")) {
       return _array();
     } else {
       let buffer = _array();
       while (true) {
-        do buffer.push(parse_("expression", tokens));
+        do buffer.push(parse_("EXPRESSION", tokens));
         let popped = next_token_(tokens);
-        if (false == tok_eq(popped, "symbol", ",")) {
+        if (false == tok_eq(popped, "SYMBOL", ",")) {
           do tokens.push(popped); # return the token
             return buffer;
         }
       }
     }
-  } else if (state == "def") {
+  } else if (state == "DEF") {
     let name_ = next_token_(tokens);
-    if (_get(name_, 0) == "identifier") {
+    if (_get(name_, 0) == "IDENTIFIER") {
       raise "bad function name: " + _get(name_, 1);
     }
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "symbol", "(")) {
+    if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
       raise "def '" + _get(name_, 1) + "' missing '(': " + _get(paren_tok, 1);
     }
 
-    let params = parse_("arglist", tokens);
+    let params = parse_("ARGLIST", tokens);
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "symbol", ")")) {
+    if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
       raise "def '" + _get(name_, 1) + "' missing ')': " + _get(paren_tok, 1);
     }
 
-    let body = parse_("scope", tokens);
-    return _array("def", name_, params, body);
-  } else if (state == "xxx") {
+    let body = parse_("SCOPE", tokens);
+    return _array("DEF", name_, params, body);
+  } else if (state == "XXX") {
     # @todo working here
   }
 }
