@@ -174,7 +174,7 @@ def parse_!(state, tokens)
       raise "reserved word in expression: #{val}" unless val == 'true' or val == 'false'
       lhs = tok
     when :identifier
-      type2, val2 = tok2 = peek(tokens)
+      tok2 = peek(tokens)
       if tok2 == [:symbol, '(']
         tokens << tok # put func name back
         lhs = parse_!(:call, tokens)
