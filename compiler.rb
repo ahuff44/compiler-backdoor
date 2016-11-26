@@ -314,23 +314,6 @@ def parse_!(state, tokens)
   end
 end
 
-def string_escape(str)
-  str.chars.map do |char|
-    case char
-    when "\n"
-      "\\n"
-    when "\t"
-      "\\t"
-    when "\\"
-      "\\\\"
-    when "\""
-      "\\\""
-    else
-      char
-    end
-  end.join
-end
-
 def generate_code(node)
   codegen(node)
 end
@@ -430,18 +413,35 @@ def codegen(node)
   end
 end
 
+def string_escape(str)
+  str.chars.map do |char|
+    case char
+    when "\n"
+      "\\n"
+    when "\t"
+      "\\t"
+    when "\\"
+      "\\\\"
+    when "\""
+      "\\\""
+    else
+      char
+    end
+  end.join
+end
+
 # for diff purposes
 def _tokens_to_string(tokens)
   def helper(tok)
     type, val = tok
-    val_to_print = string_escape(val).gsub(/\\\"/, "\"")
-    "[ '#{type.to_s.upcase}', '#{val_to_print}' ]"
+    val_to_print = string_escape(val)
+
+    "[ :#{type.to_s.upcase}, \"#{val_to_print}\" ],"
   end
 
-  a, *rest, b = tokens
-  ( ["[ #{helper(a)},"] \
-  + rest.map{|tok| "  #{helper(tok)},"} \
-  + ["  #{helper(b)} ]"] \
+  ( ["["] \
+  + tokens.map{|tok| "#{helper(tok)}"} \
+  + ["]"] \
   ).join("\n")
 end
 

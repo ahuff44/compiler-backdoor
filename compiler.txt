@@ -301,13 +301,48 @@ def generate_code(tokens) {
   return tokens;
 }
 
+def string_escape(str) {
+  def helper(char) {
+    if (char == "\n") {
+      return "\\n";
+    } else if (char == "\t") {
+      return "\\t";
+    } else if (char == "\\") {
+      return "\\\\";
+    } else if (char == "\"") {
+      return "\\\"";
+    } else {
+      return char;
+    }
+  }
+
+  let arr = str.split("");
+  let arr = arr.map(helper);
+  return arr.join("");
+}
+
+def _tokens_to_string(tokens) {
+  def helper(tok) {
+    let type = _get(tok, 0);
+    let val = _get(tok, 1);
+    let val_to_print = string_escape(val);
+
+    return "[ :" + type + ", \"" + val_to_print + "\" ],";
+  }
+
+  let buf = _array("[");
+  let buf = buf.concat(tokens.map(helper));
+  do buf.push("]");
+  return buf.join("\n");
+}
+
 let _ = _ARGV();
 let infile = _get(_, 0);
 let outfile = _get(_, 1);
 let text = _readFile(infile);
 let tokens = tokenize(text);
-do _writeFile("ahuff/boot_tokens.txt", _inspect(tokens));
-let ast = parse_entrypoint(tokens);
-do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
-let code = generate_code(ast);
-do _writeFile(outfile, code);
+do _writeFile("ahuff/boot_tokens.txt", _tokens_to_string(tokens));
+# let ast = parse_entrypoint(tokens);
+# do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
+# let code = generate_code(ast);
+# do _writeFile(outfile, code);
