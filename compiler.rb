@@ -158,7 +158,7 @@ def parse_!(state, tokens)
       ast << parse_!(:statement, tokens)
     end
   when :let
-    target = next_token!(tokens) { |(type, val)| raise "bad let target #{val}" unless type == :identifier }
+    target = next_token!(tokens) { |(type, val)| raise "bad let target: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '=': #{tok[1]}" unless tok == [:symbol, '='] }
     rhs = parse_!(:expression, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
@@ -204,7 +204,7 @@ def parse_!(state, tokens)
       raise "bad expression: #{val}"
     end
   when :call
-    name_ = next_token!(tokens) { |type, val| raise "bad call name: #{name_}: #{tok[1]}" unless type == :identifier }
+    name_ = next_token!(tokens) { |type, val| raise "bad call name: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
     args = parse_!(:explist, tokens)
     next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }

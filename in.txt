@@ -1,2 +1,1 @@
-let x = arra.ypush(3);
-let valid_prefixes = ALL_SYMBOLS.filter(validity_filter).sort(by_length);
+call foo();

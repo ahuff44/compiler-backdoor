@@ -162,7 +162,7 @@ def peek(tokens) {
 }
 
 def parse_(state, tokens) {
-  do _print(_array("parse_", state, peek(tokens)));
+  # do _print(_array("parse_", state, peek(tokens)));
 
   if (state == "scope") {
     let tok = next_token_(tokens);
@@ -184,20 +184,98 @@ def parse_(state, tokens) {
     }
 
     let tok = next_token_(tokens);
-    if (false == (_get(tok, 0) == "symbol" && _get(tok, 0) == "=")) {
+    if (false == ((_get(tok, 0) == "symbol") && (_get(tok, 0) == "="))) {
       raise "missing '=': " + _get(tok, 1);
     }
 
     let rhs = parse_("expression", tokens);
 
     let tok = next_token_(tokens);
-    if (false == (_get(tok, 0) == "symbol" && _get(tok, 0) == ";")) {
+    if (false == ((_get(tok, 0) == "symbol") && (_get(tok, 0) == ";"))) {
       raise "missing ';': " + _get(tok, 1);
     }
 
     return _array("let", target, rhs);
-  } else if (state == "xxx") { # @todo working here
+  } else if (state == "expression") {
+    let tok = next_token_(tokens);
+    let type = _get(tok, 0);
+    let val = _get(tok, 1);
+    if (type == "string") {
+      let lhs = tok;
+    } else if (type == "integer") {
+      let lhs = tok;
+    } else if (type == "reserved") {
+      if (false == ((val == "true") || (val == "false"))) {
+        raise "reserved word in expression: " + val;
+      }
+      let lhs = tok;
+    } else if (type == "identifier") {
+      let tok2 = peek(tokens);
+      let type2 = _get(tok2, 0);
+      let val2 = _get(tok2, 1);
+      if ((type2 == "symbol") && (val2 == "(")) {
+        do tokens.push(tok); # put func name back
+        let lhs = parse_("call", tokens);
+      } else {
+        let lhs = tok;
+      }
+    } else if (type == "symbol") {
+      if ((type == "symbol") && (val == "(")) {
+        let lhs = parse_("expression", tokens);
+        let paren_tok = next_token_(tokens);
+        if (false == ((_get(paren_tok, 0) == "symbol") && (_get(paren_tok, 1) == ")"))) {
+          raise "missing ')': " + _get(paren_tok, 1);
+        }
+      }
+    } else {
+      raise "iae";
+    }
 
+    # do _print(_array("lhs", lhs, peek(tokens)));
+
+    let tok = next_token_(tokens);
+    let type = _get(tok, 0);
+    let val = _get(tok, 1);
+    if (type == "symbol") {
+      if (BINPOS.includes(val)) {
+        return _array("binop", tok, lhs, parse_("expression", tokens));
+      } else { # e.g. ')', ';', or ','
+        do tokens.push(tok); # put it back
+        return lhs;
+      }
+    } else {
+      raise "bad expression " + val;
+    }
+  } else if (state == "call") {
+    let name_ = next_token_(tokens);
+    if (_get(name_, 0) != "identifier") {
+      raise "bad call name: " + _get(name_, 1);
+    }
+
+    let paren_tok = next_token_(tokens);
+    if (false == ((_get(paren_tok, 0) == "symbol") && (_get(paren_tok, 1) == "("))) {
+      raise "missing '(': " + _get(paren_tok, 1);
+    }
+
+    let args = parse_("explist", tokens);
+
+    let paren_tok = next_token_(tokens);
+    if (false == ((_get(paren_tok, 0) == "symbol") && (_get(paren_tok, 1) == ")"))) {
+      raise "missing ')': " + _get(paren_tok, 1);
+    }
+
+    return _array("call", name_, args);
+  } else if (state == "do") {
+    let call_ = parse_("call", tokens);
+
+    let semi_tok = next_token_(tokens);
+    if (false == ((_get(semi_tok, 0) == "symbol") && (_get(semi_tok, 1) == ";"))) {
+      raise "missing ';': " + _get(semi_tok, 1);
+    }
+
+    return _array("do", call);
+  } else if (state == "xxx") {
+    # @todo working here
   }
 }
 
