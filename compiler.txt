@@ -291,7 +291,25 @@ def parse_(state, tokens) {
       }
     }
   } else if (state == "def") {
+    let name_ = next_token_(tokens);
+    if (_get(name_, 0) == "identifier") {
+      raise "bad function name: " + _get(name_, 1);
+    }
 
+    let paren_tok = next_token_(tokens);
+    if (false == tok_eq(paren_tok, "symbol", "(")) {
+      raise "def '" + _get(name_, 1) + "' missing '(': " + _get(paren_tok, 1);
+    }
+
+    let params = parse_("arglist", tokens);
+
+    let paren_tok = next_token_(tokens);
+    if (false == tok_eq(paren_tok, "symbol", ")")) {
+      raise "def '" + _get(name_, 1) + "' missing ')': " + _get(paren_tok, 1);
+    }
+
+    let body = parse_("scope", tokens);
+    return _array("def", name_, params, body);
   } else if (state == "xxx") {
     # @todo working here
   }
