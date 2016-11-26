@@ -1,1 +1,1 @@
-call foo();
+do foo();

@@ -1,4 +1,4 @@
-let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "call", "do", "raise");
+let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "do", "raise");
 let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}");
 let BINOPS = _array("+", "-", "*", "==", "!=", "<", ">", "<=", ">=", "||", "&&");
 let ALL_SYMBOLS = SYNTAX.concat(BINOPS);
@@ -266,7 +266,7 @@ def parse_(state, tokens) {
 
     return _array("call", name_, args);
   } else if (state == "do") {
-    let call_ = parse_("call", tokens);
+    let call = parse_("call", tokens);
 
     let semi_tok = next_token_(tokens);
     if (false == ((_get(semi_tok, 0) == "symbol") && (_get(semi_tok, 1) == ";"))) {

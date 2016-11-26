@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 
-RESERVED = %w(true false let def if while return break call do raise)
+RESERVED = %w(true false let def if while return break do raise)
 SYNTAX = %w(= ; ( ) , { })
 BINOPS = %w(+ - * == != < > <= >= || &&)
 ALL_SYMBOLS = SYNTAX + BINOPS
@@ -203,13 +203,13 @@ def parse_!(state, tokens)
     else
       raise "bad expression: #{val}"
     end
-  when :call
+  when :call # expression
     name_ = next_token!(tokens) { |type, val| raise "bad call name: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
     args = parse_!(:explist, tokens)
     next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
     [:call, name_, args]
-  when :do
+  when :do # statement
     call = parse_!(:call, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
     [:do, call]
