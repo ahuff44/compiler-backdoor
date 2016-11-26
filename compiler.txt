@@ -274,6 +274,22 @@ def parse_(state, tokens) {
     }
 
     return _array("do", call);
+  } else if (state == "explist") {
+    if ((_get(peek(tokens), 0) == "symbol") && (_get(peek(tokens), 1) == ")")) {
+      return _array();
+    } else {
+      let buffer = _array();
+      while (true) {
+        do buffer.push(parse_("expression", tokens));
+        let popped = next_token_(tokens);
+        if (false == ((_get(popped, 0) == "symbol") && (_get(popped, 1) == ","))) {
+          do tokens.push(popped); # return the token
+            return buffer;
+        }
+      }
+    }
+  } else if (state == "def") {
+
   } else if (state == "xxx") {
     # @todo working here
   }
