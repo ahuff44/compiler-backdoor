@@ -140,8 +140,65 @@ def tokenize(text) {
   return tokens;
 }
 
-def parse(tokens) {
-  return tokens;
+def parse_entrypoint(tokens) {
+  let prefix = _array(_array("symbol", "{"));
+  let tokens = prefix.concat(tokens);
+  do tokens.push(_array("symbol", "}"));
+  do tokens.reverse(); # convinient for next_token_ etc
+  let ast = parse_("scope", tokens);
+  if (false && (tokens.length != 0)) { # @todo re-add
+    raise "trailing tokens";
+  } else {
+    return ast;
+  }
+}
+
+def next_token_(tokens) {
+  return tokens.pop();
+}
+
+def peek(tokens) {
+  return _get(tokens, tokens.length - 1);
+}
+
+def parse_(state, tokens) {
+  do _print(_array("parse_", state, peek(tokens)));
+
+  if (state == "scope") {
+    let tok = next_token_(tokens);
+    if (false == ((_get(tok, 0) == "symbol") && (_get(tok, 1) == "{"))) {
+      raise "scope missing '{': " + _get(tok, 1);
+    }
+    let ast = _array();
+    while (true) {
+      if ((_get(peek(tokens), 0) == "symbol") && (_get(peek(tokens), 1) == "}")) {
+        do next_token_(tokens);
+        return _array("scope", ast);
+      }
+      do ast.push(parse_("statement", tokens));
+    }
+  } else if (state == "let") {
+    let target = next_token_(tokens);
+    if (false == (_get(tok, 0) == "identifier")) {
+      raise "bad let target " + _get(tok, 1);
+    }
+
+    let tok = next_token_(tokens);
+    if (false == (_get(tok, 0) == "symbol" && _get(tok, 0) == "=")) {
+      raise "missing '=': " + _get(tok, 1);
+    }
+
+    let rhs = parse_("expression", tokens);
+
+    let tok = next_token_(tokens);
+    if (false == (_get(tok, 0) == "symbol" && _get(tok, 0) == ";")) {
+      raise "missing ';': " + _get(tok, 1);
+    }
+
+    return _array("let", target, rhs);
+  } else if (state == "xxx") { # @todo working here
+
+  }
 }
 
 def generate_code(tokens) {
@@ -154,6 +211,7 @@ let outfile = _get(_, 1);
 let text = _readFile(infile);
 let tokens = tokenize(text);
 do _writeFile("ahuff/boot_tokens.txt", _inspect(tokens));
-let ast = parse(tokens);
+let ast = parse_entrypoint(tokens);
+do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
 let code = generate_code(ast);
 do _writeFile(outfile, code);
