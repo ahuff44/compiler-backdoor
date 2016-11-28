@@ -7,7 +7,7 @@ def is_symbol_character(char) {
   def is_relevant_symbol(sym) {
     return sym.includes(char);
   }
-  return _any(ALL_SYMBOLS, is_relevant_symbol);
+  return ALL_SYMBOLS.some(is_relevant_symbol);
 }
 
 let DIGITS = _array("0","1","2","3","4","5","6","7","8","9");
@@ -86,7 +86,7 @@ def tokenize(text) {
           let to_push = valid_prefixes.pop();
           do tokens.push(_array(state, to_push));
 
-          # buffer.shuft(to_push.length)
+          # buffer.shift(to_push.length)
           let ix3 = 0;
           while (ix3 < to_push.length) {
             do _leftpop(buffer);
@@ -429,8 +429,143 @@ def parse_(state, tokens) {
   }
 }
 
-def generate_code(tokens) {
-  return tokens;
+def generate_code(node) {
+  return codegen(node);
+}
+
+def codegen_list(list, sep) {
+  let list = list.map(codegen);
+  return list.join(sep);
+}
+
+def codegen(node) {
+  do _print(_array("codegen", node));
+
+  let node_type = _leftpop(node);
+  if (node_type == "SCOPE") {
+    let body = _leftpop(node);
+
+    let temp = body.map(codegen);
+    return temp.join("\n");
+  } else if (node_type == "LET") {
+    alloc target;
+    alloc rhs;
+    let target = _leftpop(node);
+    let rhs = _leftpop(node);
+    return codegen(target)+" = "+codegen(rhs)+";";
+  } else if (node_type == "BINOP") {
+    alloc lhs;
+    alloc type;
+    alloc rhs;
+    let type = _leftpop(node);
+    let lhs = _leftpop(node);
+    let rhs = _leftpop(node);
+    return "("+codegen(lhs)+" "+codegen(type)+" "+codegen(rhs)+")";
+  } else if (node_type == "CALL") {
+    alloc args;
+    alloc name_str;
+    let name_ = _leftpop(node);
+    let args = _leftpop(node);
+    let name_str = codegen(name_);
+    if (name_str == "_array") { # shim in javascript methods
+      return "["+codegen_list(args, ", ")+"]";
+    } else if (name_str == "_leftpop") {
+      let arr = _leftpop(args);
+      return codegen(arr)+".splice(0,1)[0]";
+    } else if (name_str == "_get") {
+      alloc arr;
+      alloc ix;
+      let arr = _leftpop(args);
+      let ix = _leftpop(args);
+      return codegen(arr)+"["+codegen(ix)+"]";
+    } else if (name_str == "_readFile") {
+      let fname = _leftpop(args);
+      return "require('fs').readFileSync("+codegen(fname)+", 'utf-8')";
+    } else if (name_str == "_writeFile") {
+      alloc fname;
+      alloc data;
+      let fname = _leftpop(args);
+      let data = _leftpop(args);
+      return "require('fs').writeFileSync("+codegen(fname)+", "+codegen(data)+", 'utf-8')";
+    } else if (name_str == "_inspect") {
+      let data = _leftpop(args);
+      return "require('util').inspect("+codegen(data)+", false, null)";
+    } else if (name_str == "_print") {
+      let val = _leftpop(args);
+      return "console.log("+codegen(val)+")";
+    } else if (name_str == "_ARGV") {
+      return "process.argv.slice(2)";
+    } else {
+      return name_str+"("+codegen_list(args, ", ")+")";
+    }
+  } else if (node_type == "DO") {
+    let call = _leftpop(node);
+    return codegen(call) + ";";
+  } else if (node_type == "DEF") {
+    alloc name_;
+    alloc params;
+    alloc body;
+
+    let name_ = _leftpop(node);
+    let params = _leftpop(node);
+    let body = _leftpop(node);
+    return "function "+codegen(name_)+"("+codegen_list(params, ", ")+") {\n"+codegen(body)+"\n}";
+  } else if (node_type == "IF") {
+    alloc cond;
+    alloc then_;
+    alloc else_;
+    alloc fst;
+    alloc snd;
+
+    let cond = _leftpop(node);
+    let then_ = _leftpop(node);
+    let else_ = _leftpop(node);
+    let fst = "if ("+codegen(cond)+") {\n"+codegen(then_)+"\n}";
+    if (else_) {# @hack if else_ is undefined
+      let snd = " else {\n"+codegen(else_)+"\n}";
+    } else {
+      let snd = "";
+    }
+    return fst + snd;
+  } else if (node_type == "WHILE") {
+    alloc cond;
+    alloc body;
+
+    let cond = _leftpop(node);
+    let body = _leftpop(node);
+    return "while ("+codegen(cond)+") {\n"+codegen(body)+"\n}";
+  } else if (node_type == "RETURN") {
+    let val = _leftpop(node);
+    return "return "+codegen(val)+";";
+  } else if (node_type == "BREAK") {
+    return "break;";
+  } else if (node_type == "RAISE") {
+    let val = _leftpop(node);
+    return "throw new Error("+codegen(val)+");";
+  } else if (node_type == "ALLOC") {
+    let target = _leftpop(node);
+    return "let "+codegen(target)+";";
+  } else if (node_type == "INTEGER") {
+    let val = _leftpop(node);
+    return "" + val;
+  } else if (node_type == "STRING") {
+    let val = _leftpop(node);
+    return "\""+string_escape(val)+"\"";
+  } else if (node_type == "RESERVED") {
+    let word = _leftpop(node);
+    return word;
+  } else if (node_type == "SYMBOL") {
+    let val = _leftpop(node);
+    if (val == "==") {
+      let val = "===";
+    }
+    return val;
+  } else if (node_type == "IDENTIFIER") {
+    let varname = _leftpop(node);
+    return varname;
+  } else {
+    raise "iae: unrecognized node type: " + node_type;
+  }
 }
 
 def string_escape(str) {
@@ -476,5 +611,5 @@ let tokens = tokenize(text);
 do _writeFile("ahuff/boot_tokens.txt", _tokens_to_string(tokens));
 let ast = parse_entrypoint(tokens);
 do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
-# let code = generate_code(ast);
-# do _writeFile(outfile, code);
+let code = generate_code(ast);
+do _writeFile(outfile, code);
