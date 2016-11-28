@@ -41,18 +41,7 @@ def tokenize(text)
         state = :none
       end
     when :escape_char
-      buffer << case char
-        when "n"
-          "\n"
-        when "t"
-          "\t"
-        when "\\"
-          "\\"
-        when "\""
-          "\""
-        else
-          char
-        end
+      buffer << generate_escape_code(char)
       state = :string
     when :integer
       if char =~ /\d/
@@ -360,7 +349,7 @@ def codegen(node)
     "#{codegen(call)};"
   when :def
     name_, params, body = node
-    "function #{codegen(name_)}(#{codegen_list(params, ', ')}) {\n#{codegen(body)}\n}"
+    codegen_def(name_, params, body)
   when :if
     cond, then_, else_ = node
     fst = "if (#{codegen(cond)}) {\n#{codegen(then_)}\n}"
@@ -400,6 +389,21 @@ def codegen(node)
     "#{varname}"
   else
     raise "iae: unrecognized node type: #{node_type}"
+  end
+end
+
+def codegen_def(name_, params, body)
+  "function #{codegen(name_)}(#{codegen_list(params, ', ')}) {\n#{codegen(body)}\n}"
+end
+
+def generate_escape_code(char)
+  case char
+  when "n"
+    "\n"
+  when "t"
+    "\t"
+  else
+    char
   end
 end
 

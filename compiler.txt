@@ -38,12 +38,7 @@ def tokenize(text) {
         let state = "NONE";
       }
     } else if (state == "ESCAPE_CHAR") {
-      let to_push = char;
-      if (char == "n") {
-        let to_push = "\n";
-      } else if (char == "t") {
-        let to_push = "\t";
-      }
+      let to_push = generate_escape_code(char);
       do buffer.push(to_push);
       let state = "STRING";
     } else if (state == "INTEGER") {
@@ -439,7 +434,7 @@ def codegen_list(list, sep) {
 }
 
 def codegen(node) {
-  do _print(_array("codegen", node));
+  # do _print(_array("codegen", node));
 
   let node_type = _leftpop(node);
   if (node_type == "SCOPE") {
@@ -509,7 +504,7 @@ def codegen(node) {
     let name_ = _leftpop(node);
     let params = _leftpop(node);
     let body = _leftpop(node);
-    return "function "+codegen(name_)+"("+codegen_list(params, ", ")+") {\n"+codegen(body)+"\n}";
+    return codegen_def(name_, params, body);
   } else if (node_type == "IF") {
     alloc cond;
     alloc then_;
@@ -565,6 +560,20 @@ def codegen(node) {
     return varname;
   } else {
     raise "iae: unrecognized node type: " + node_type;
+  }
+}
+
+def codegen_def(name_, params, body) {
+  return "function "+codegen(name_)+"("+codegen_list(params, ", ")+") {\n"+codegen(body)+"\n}";
+}
+
+def generate_escape_code(char) {
+  if (char == "n") {
+    return "\n";
+  } else if (char == "t") {
+    return "\t";
+  } else {
+    return char;
   }
 }
 
