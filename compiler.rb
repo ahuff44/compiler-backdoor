@@ -423,17 +423,17 @@ def string_escape(str)
   end.join
 end
 
+def _tok_to_string(tok)
+  type, val = tok
+  val_to_print = string_escape(val)
+
+  "[ :#{type.to_s.upcase}, \"#{val_to_print}\" ],"
+end
+
 # for diff purposes
 def _tokens_to_string(tokens)
-  def helper(tok)
-    type, val = tok
-    val_to_print = string_escape(val)
-
-    "[ :#{type.to_s.upcase}, \"#{val_to_print}\" ],"
-  end
-
   ( ["["] \
-  + tokens.map{|tok| "#{helper(tok)}"} \
+  + tokens.map{|tok| "#{_tok_to_string(tok)}"} \
   + ["]"] \
   ).join("\n")
 end

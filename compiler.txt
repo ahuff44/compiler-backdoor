@@ -183,6 +183,7 @@ def parse_(state, tokens) {
       do ast.push(parse_("STATEMENT", tokens));
     }
   } else if (state == "LET") {
+    alloc target;
     let target = next_token_(tokens);
     if (false == (_get(target, 0) == "IDENTIFIER")) {
       raise "bad let target: " + _get(tok, 1);
@@ -202,9 +203,14 @@ def parse_(state, tokens) {
 
     return _array("LET", target, rhs);
   } else if (state == "EXPRESSION") {
+    alloc tok;
     let tok = next_token_(tokens);
+    alloc type;
     let type = _get(tok, 0);
+    alloc val;
     let val = _get(tok, 1);
+
+    alloc lhs;
     if (type == "STRING") {
       let lhs = tok;
     } else if (type == "INTEGER") {
@@ -250,6 +256,7 @@ def parse_(state, tokens) {
       raise "bad expression " + val;
     }
   } else if (state == "CALL") {
+    alloc name_;
     let name_ = next_token_(tokens);
     if (_get(name_, 0) != "IDENTIFIER") {
       raise "bad call name: " + _get(name_, 1);
@@ -281,13 +288,14 @@ def parse_(state, tokens) {
     if (tok_eq(peek(tokens), "SYMBOL", ")")) {
       return _array();
     } else {
+      alloc buffer;
       let buffer = _array();
       while (true) {
         do buffer.push(parse_("EXPRESSION", tokens));
         let popped = next_token_(tokens);
         if (false == tok_eq(popped, "SYMBOL", ",")) {
           do tokens.push(popped); # return the token
-            return buffer;
+          return buffer;
         }
       }
     }
@@ -310,6 +318,7 @@ def parse_(state, tokens) {
       }
     }
   } else if (state == "DEF") {
+    alloc name_;
     let name_ = next_token_(tokens);
     if (_get(name_, 0) != "IDENTIFIER") {
       raise "bad function name: " + _get(name_, 1);
@@ -320,6 +329,7 @@ def parse_(state, tokens) {
       raise "def '" + _get(name_, 1) + "' missing '(': " + _get(paren_tok, 1);
     }
 
+    alloc params;
     let params = parse_("ARGLIST", tokens);
 
     let paren_tok = next_token_(tokens);
@@ -330,6 +340,10 @@ def parse_(state, tokens) {
     let body = parse_("SCOPE", tokens);
     return _array("DEF", name_, params, body);
   } else if (state == "IF") {
+    alloc cond;
+    alloc then_;
+    alloc else_;
+
     let paren_tok = next_token_(tokens);
     if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
       raise "'if' missing '(': " + _get(paren_tok, 1);
@@ -354,11 +368,11 @@ def parse_(state, tokens) {
       } else {
         raise "bad 'else' branch: " + peek(_get(tokens, 1));
       }
-    } else {
-      let else_ = 0; # @hack
-    }
+    } # @hack: else_ will be undefined if this branch is not taken
     return _array("IF", cond, then_, else_);
   } else if (state == "WHILE") {
+    alloc cond;
+    alloc body;
     let cond = parse_("EXPRESSION", tokens);
     let body = parse_("SCOPE", tokens);
     return _array("WHILE", cond, body);
@@ -393,7 +407,7 @@ def parse_(state, tokens) {
       raise "missing ';': " + _get(semi_tok, 1);
     }
 
-    return _array("RAISE", target);
+    return _array("ALLOC", target);
   } else if (state == "STATEMENT") {
     let tok = next_token_(tokens);
     let type = _get(tok, 0);
@@ -439,17 +453,17 @@ def string_escape(str) {
   return arr.join("");
 }
 
+def _tok_to_string(tok) {
+  let type = _get(tok, 0);
+  let val = _get(tok, 1);
+  let val_to_print = string_escape(val);
+
+  return "[ :" + type + ", \"" + val_to_print + "\" ],";
+}
+
 def _tokens_to_string(tokens) {
-  def helper(tok) {
-    let type = _get(tok, 0);
-    let val = _get(tok, 1);
-    let val_to_print = string_escape(val);
-
-    return "[ :" + type + ", \"" + val_to_print + "\" ],";
-  }
-
   let buf = _array("[");
-  let buf = buf.concat(tokens.map(helper));
+  let buf = buf.concat(tokens.map(_tok_to_string));
   do buf.push("]");
   return buf.join("\n");
 }
