@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 
-RESERVED = %w(true false let def if while return break do raise)
+RESERVED = %w(true false let def if while return break do raise alloc)
 SYNTAX = %w(= ; ( ) , { })
 BINOPS = %w(+ - * == != < > <= >= || &&)
 ALL_SYMBOLS = SYNTAX + BINOPS
@@ -281,11 +281,15 @@ def parse_!(state, tokens)
     val = parse_!(:expression, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
     [:raise, val]
+  when :alloc
+    target = next_token!(tokens){ |type, val| raise "bad alloc target: #{val}" unless type == :identifier }
+    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    [:alloc, target]
   when :statement
     type, val = tok = next_token!(tokens)
     case type
     when :reserved
-      if %w(let def if while return break do raise).include?(val)
+      if %w(let def if while return break do raise alloc).include?(val)
         parse_!(val.to_sym, tokens)
       else
         raise "unknown reserved word: #{val}"
@@ -376,6 +380,9 @@ def codegen(node)
   when :raise
     val, = node
     "throw new Error(#{codegen(val)});"
+  when :alloc
+    target, = node
+    "let #{codegen(target)};"
   when :integer
     val, = node
     "#{val}"

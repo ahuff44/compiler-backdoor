@@ -1,4 +1,4 @@
-let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "do", "raise");
+let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "do", "raise", "alloc");
 let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}");
 let BINOPS = _array("+", "-", "*", "==", "!=", "<", ">", "<=", ">=", "||", "&&");
 let ALL_SYMBOLS = SYNTAX.concat(BINOPS);
@@ -165,7 +165,7 @@ def tok_eq(tok1, sym, val) {
   return (_get(tok1, 0) == sym) && (_get(tok1, 1) == val);
 }
 
-def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS insanity that breaks SCOPE parsing
+def parse_(state, tokens) {
   # do _print(_array("parse_", state, peek(tokens)));
 
   if (state == "SCOPE") {
@@ -173,6 +173,7 @@ def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS
     if (false == tok_eq(tok, "SYMBOL", "{")) {
       raise "scope missing '{': " + _get(tok, 1);
     }
+    alloc ast;
     let ast = _array();
     while (true) {
       if (tok_eq(peek(tokens), "SYMBOL", "}")) {
@@ -313,7 +314,6 @@ def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS
     if (_get(name_, 0) != "IDENTIFIER") {
       raise "bad function name: " + _get(name_, 1);
     }
-    do _print(name_);
 
     let paren_tok = next_token_(tokens);
     if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
@@ -321,7 +321,6 @@ def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS
     }
 
     let params = parse_("ARGLIST", tokens);
-    do _print(params);
 
     let paren_tok = next_token_(tokens);
     if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
@@ -329,7 +328,6 @@ def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS
     }
 
     let body = parse_("SCOPE", tokens);
-    do _print(body);
     return _array("DEF", name_, params, body);
   } else if (state == "IF") {
     let paren_tok = next_token_(tokens);
@@ -384,12 +382,24 @@ def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS
       raise "missing ';': " + _get(semi_tok, 1);
     }
     return _array("RAISE", val);
+  } else if (state == "ALLOC") {
+    let target = next_token_(tokens);
+    if (_get(target, 0) != "IDENTIFIER") {
+      raise "bad alloc target: " + _get(target, 1);
+    }
+
+    let semi_tok = next_token_(tokens);
+    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
+      raise "missing ';': " + _get(semi_tok, 1);
+    }
+
+    return _array("RAISE", target);
   } else if (state == "STATEMENT") {
     let tok = next_token_(tokens);
     let type = _get(tok, 0);
     let val = _get(tok, 1);
     if (type == "RESERVED") {
-      let STATEMENT_STARTERS = _array("let", "def", "if", "while", "return", "break", "do", "raise");
+      let STATEMENT_STARTERS = _array("let", "def", "if", "while", "return", "break", "do", "raise", "alloc");
       if (STATEMENT_STARTERS.includes(val)) {
         return parse_(val.toUpperCase(), tokens);
       } else {
