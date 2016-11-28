@@ -144,6 +144,7 @@ def peek(tokens)
 end
 
 def parse_!(state, tokens)
+  # p ['parse_!', state, peek(tokens)]
   # p ['parse_!', state, tokens.reverse]
 
   case state
@@ -284,23 +285,8 @@ def parse_!(state, tokens)
     type, val = tok = next_token!(tokens)
     case type
     when :reserved
-      case val
-      when "let"
-        parse_!(:let, tokens)
-      when "def"
-        parse_!(:def, tokens)
-      when "if"
-        parse_!(:if, tokens)
-      when "while"
-        parse_!(:while, tokens)
-      when "return"
-        parse_!(:return, tokens)
-      when "break"
-        parse_!(:break, tokens)
-      when "do"
-        parse_!(:do, tokens)
-      when "raise"
-        parse_!(:raise, tokens)
+      if %w(let def if while return break do raise).include?(val)
+        parse_!(val.to_sym, tokens)
       else
         raise "unknown reserved word: #{val}"
       end
@@ -452,6 +438,7 @@ tokens = tokenize(text)
 File.write("ahuff/main_tokens.txt", _tokens_to_string(tokens)) # @debug
 # puts "\ntokens:\n#{tokens}"
 ast = parse(tokens)
+File.write("ahuff/main_ast.txt", ast) # @debug
 # puts "\nast:\n#{ast}"
 code = generate_code(ast)
 # puts "\ncode:\n#{code}"

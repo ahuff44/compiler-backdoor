@@ -146,7 +146,7 @@ def parse_entrypoint(tokens) {
   do tokens.push(_array("SYMBOL", "}"));
   do tokens.reverse(); # convinient for next_token_ etc
   let ast = parse_("SCOPE", tokens);
-  if (false && (tokens.length != 0)) { # @todo re-add
+  if (tokens.length != 0) {
     raise "trailing tokens";
   } else {
     return ast;
@@ -165,7 +165,7 @@ def tok_eq(tok1, sym, val) {
   return (_get(tok1, 0) == sym) && (_get(tok1, 1) == val);
 }
 
-def parse_(state, tokens) {
+def parse_(state, tokens, ast) { # @hack ast is defined here to avoid var/let JS insanity that breaks SCOPE parsing
   # do _print(_array("parse_", state, peek(tokens)));
 
   if (state == "SCOPE") {
@@ -183,8 +183,8 @@ def parse_(state, tokens) {
     }
   } else if (state == "LET") {
     let target = next_token_(tokens);
-    if (false == (_get(tok, 0) == "IDENTIFIER")) {
-      raise "bad let target " + _get(tok, 1);
+    if (false == (_get(target, 0) == "IDENTIFIER")) {
+      raise "bad let target: " + _get(tok, 1);
     }
 
     let tok = next_token_(tokens);
@@ -239,7 +239,7 @@ def parse_(state, tokens) {
     let type = _get(tok, 0);
     let val = _get(tok, 1);
     if (type == "SYMBOL") {
-      if (BINPOS.includes(val)) {
+      if (BINOPS.includes(val)) {
         return _array("BINOP", tok, lhs, parse_("EXPRESSION", tokens));
       } else { # e.g. ')', ';', or ','
         do tokens.push(tok); # put it back
@@ -271,7 +271,7 @@ def parse_(state, tokens) {
     let call = parse_("CALL", tokens);
 
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", ";")) {
+    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
       raise "missing ';': " + _get(semi_tok, 1);
     }
 
@@ -290,11 +290,30 @@ def parse_(state, tokens) {
         }
       }
     }
+  } else if (state == "ARGLIST") {
+    if (tok_eq(peek(tokens), "SYMBOL", ")")) {
+      return _array();
+    } else {
+      let buffer = _array();
+      while (true) {
+        let tok = next_token_(tokens);
+        if (_get(tok, 0) != "IDENTIFIER") {
+          raise "bad arg: " + _get(tok, 1);
+        }
+        do buffer.push(tok);
+        let popped = next_token_(tokens);
+        if (false == tok_eq(popped, "SYMBOL", ",")) {
+          do tokens.push(popped); # return the token
+            return buffer;
+        }
+      }
+    }
   } else if (state == "DEF") {
     let name_ = next_token_(tokens);
-    if (_get(name_, 0) == "IDENTIFIER") {
+    if (_get(name_, 0) != "IDENTIFIER") {
       raise "bad function name: " + _get(name_, 1);
     }
+    do _print(name_);
 
     let paren_tok = next_token_(tokens);
     if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
@@ -302,6 +321,7 @@ def parse_(state, tokens) {
     }
 
     let params = parse_("ARGLIST", tokens);
+    do _print(params);
 
     let paren_tok = next_token_(tokens);
     if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
@@ -309,9 +329,79 @@ def parse_(state, tokens) {
     }
 
     let body = parse_("SCOPE", tokens);
+    do _print(body);
     return _array("DEF", name_, params, body);
-  } else if (state == "XXX") {
-    # @todo working here
+  } else if (state == "IF") {
+    let paren_tok = next_token_(tokens);
+    if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
+      raise "'if' missing '(': " + _get(paren_tok, 1);
+    }
+
+    let cond = parse_("EXPRESSION", tokens);
+
+    let paren_tok = next_token_(tokens);
+    if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
+      raise "'if' missing ')': " + _get(paren_tok, 1);
+    }
+
+    let then_ = parse_("SCOPE", tokens);
+
+    if (tok_eq(peek(tokens), "IDENTIFIER", "else")) {
+      do next_token_(tokens); # consume 'else'
+      if (tok_eq(peek(tokens), "SYMBOL", "{")) {
+        let else_ = parse_("SCOPE", tokens);
+      } else if (tok_eq(peek(tokens), "RESERVED", "if")) {
+        do next_token_(tokens); # consume 'if'
+        let else_ = parse_("IF", tokens);
+      } else {
+        raise "bad 'else' branch: " + peek(_get(tokens, 1));
+      }
+    } else {
+      let else_ = 0; # @hack
+    }
+    return _array("IF", cond, then_, else_);
+  } else if (state == "WHILE") {
+    let cond = parse_("EXPRESSION", tokens);
+    let body = parse_("SCOPE", tokens);
+    return _array("WHILE", cond, body);
+  } else if (state == "RETURN") {
+    let val = parse_("EXPRESSION", tokens);
+    let semi_tok = next_token_(tokens);
+    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
+      raise "missing ';': " + _get(semi_tok, 1);
+    }
+    return _array("RETURN", val);
+  } else if (state == "BREAK") {
+    let semi_tok = next_token_(tokens);
+    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
+      raise "missing ';': " + _get(semi_tok, 1);
+    }
+    return _array("BREAK");
+  } else if (state == "RAISE") {
+    let val = parse_("EXPRESSION", tokens);
+    let semi_tok = next_token_(tokens);
+    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
+      raise "missing ';': " + _get(semi_tok, 1);
+    }
+    return _array("RAISE", val);
+  } else if (state == "STATEMENT") {
+    let tok = next_token_(tokens);
+    let type = _get(tok, 0);
+    let val = _get(tok, 1);
+    if (type == "RESERVED") {
+      let STATEMENT_STARTERS = _array("let", "def", "if", "while", "return", "break", "do", "raise");
+      if (STATEMENT_STARTERS.includes(val)) {
+        return parse_(val.toUpperCase(), tokens);
+      } else {
+        raise "unknown reserved word: " + val;
+      }
+    } else if (type) {
+      raise "unexpected statement starting at: " + val + "; next token is: " + peek(tokens);
+    } else { # @hack for type == undefined
+      raise "unexpected end of input";
+    }
+  } else {
+    raise "unimplemented state: " + state;
   }
 }
 
@@ -360,7 +450,7 @@ let outfile = _get(_, 1);
 let text = _readFile(infile);
 let tokens = tokenize(text);
 do _writeFile("ahuff/boot_tokens.txt", _tokens_to_string(tokens));
-# let ast = parse_entrypoint(tokens);
-# do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
+let ast = parse_entrypoint(tokens);
+do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
 # let code = generate_code(ast);
 # do _writeFile(outfile, code);

@@ -1,1 +1,6 @@
-do foo();
+def is_symbol_character(char) {
+  def is_relevant_symbol(sym) {
+    return sym.includes(char);
+  }
+  return _any(ALL_SYMBOLS, is_relevant_symbol);
+}
