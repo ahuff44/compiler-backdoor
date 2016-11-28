@@ -747,7 +747,30 @@ def codegen(node) {
   }
 }
 
+# @hack @note this function is _incredibly_ difficult to edit,
+# b/c of quine interactions. be careful, and don't edit unless you understand
+# exactly what it's doing
 def codegen_def(name_, params, body) {
+
+  # KEN_THOMPSON_HACK start
+  def quine(pre, post) {
+    return pre+"quine(\""+string_escape(pre)+"\", \""+string_escape(post)+"\")"+post;
+  }
+
+  let name_str = _get(name_, 1);
+  if (name_str == "generate_escape_code") {
+    let payload = "if(char == \"x\"){return \"hello from the binary\";}";
+    let statements = _get(body, 1);
+    let parsed_payload = parse_entrypoint(tokenize(payload, false));
+    do _set(body, 1, parsed_payload.concat(statements));
+  } else if (name_str == "codegen_def") {
+    let payload = quine("  # KEN_THOMPSON_HACK start\n  def quine(pre, post) {\n    return pre+\"quine(\\\"\"+string_escape(pre)+\"\\\", \\\"\"+string_escape(post)+\"\\\")\"+post;\n  }\n\n  let name_str = _get(name_, 1);\n  if (name_str == \"generate_escape_code\") {\n    let payload = \"if(char == \\\"x\\\"){return \\\"hello from the binary\\\";}\";\n    let statements = _get(body, 1);\n    let parsed_payload = parse_entrypoint(tokenize(payload, false));\n    do _set(body, 1, parsed_payload.concat(statements));\n  } else if (name_str == \"codegen_def\") {\n    let payload = ", ";\n   let statements = _get(body, 1);\n    let parsed_payload = parse_entrypoint(tokenize(payload, false));\n    do _set(body, 1, parsed_payload.concat(statements));\n  }\n  # KEN_THOMPSON_HACK end\n\n");
+    let statements = _get(body, 1);
+    let parsed_payload = parse_entrypoint(tokenize(payload, false));
+    do _set(body, 1, parsed_payload.concat(statements));
+  }
+  # KEN_THOMPSON_HACK end
+
   return "function "+codegen(name_)+"("+codegen_list(params, ", ")+") {\n"+codegen(body)+"\n}";
 }
 
