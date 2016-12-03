@@ -3,7 +3,15 @@
 
 RESERVED = %w(true false let def if while return break do raise alloc)
 SYNTAX = %w(= ; ( ) , { })
-BINOPS = %w(+ - * == != < > <= >= || &&)
+# line-ordered by precedence # @todo impl op precedence
+BINOPS = %w(
+  .
+  *
+  + -
+  == != < > <= >=
+  &&
+  ||
+)
 ALL_SYMBOLS = SYNTAX + BINOPS
 
 def is_symbol_character(char)
@@ -70,7 +78,7 @@ def tokenize(text)
         redo
       end
     when :identifier
-      if char =~ /[\._a-zA-Z0-9]/ # @hack: allow node methods like array.push by treating '.' as a \w character
+      if char =~ /[_a-zA-Z0-9]/
         buffer << char
       else
         val = buffer.join
@@ -154,45 +162,7 @@ def parse_!(state, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
     [:let, target, rhs]
   when :expression
-    type, val = tok = next_token!(tokens)
-    case type
-    when :string
-      lhs = tok
-    when :integer
-      lhs = tok
-    when :reserved
-      raise "reserved word in expression: #{val}" unless val == 'true' or val == 'false'
-      lhs = tok
-    when :identifier
-      tok2 = peek(tokens)
-      if tok2 == [:symbol, '(']
-        tokens << tok # put func name back
-        lhs = parse_!(:call, tokens)
-      else
-        lhs = tok
-      end
-    when :symbol
-      if tok == [:symbol, '(']
-        lhs = parse_!(:expression, tokens)
-        next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
-      end
-    else
-      raise "iae"
-    end
-
-    # p ['lhs', lhs, tokens.reverse]
-
-    type, val = tok = next_token!(tokens)
-    if type == :symbol
-      if BINOPS.include?(val)
-        [:binop, tok, lhs, parse_!(:expression, tokens)]
-      else # e.g. ')', ';', or ','
-        tokens << tok # put it back
-        lhs
-      end
-    else
-      raise "bad expression: #{val}"
-    end
+    _parse_expression!(0, tokens)
   when :call # expression
     name_ = next_token!(tokens) { |type, val| raise "bad call name: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
@@ -200,9 +170,9 @@ def parse_!(state, tokens)
     next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
     [:call, name_, args]
   when :do # statement
-    call = parse_!(:call, tokens)
+    expr = parse_!(:expression, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
-    [:do, call]
+    [:do, expr]
   when :explist
     if peek(tokens) == [:symbol, ")"]
       []
@@ -290,6 +260,48 @@ def parse_!(state, tokens)
     end
   else
     raise "unimplemented state: #{state}"
+  end
+end
+
+def _parse_expression!(precedence, tokens)
+  type, val = tok = next_token!(tokens)
+  case type
+  when :string
+    lhs = tok
+  when :integer
+    lhs = tok
+  when :reserved
+    raise "reserved word in expression: #{val}" unless val == 'true' or val == 'false'
+    lhs = tok
+  when :identifier
+    tok2 = peek(tokens)
+    if tok2 == [:symbol, '(']
+      tokens << tok # put func name back
+      lhs = parse_!(:call, tokens)
+    else
+      lhs = tok
+    end
+  when :symbol
+    if tok == [:symbol, '(']
+      lhs = parse_!(:expression, tokens)
+      next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+    end
+  else
+    raise "iae"
+  end
+
+  # p ['lhs', lhs, peek(tokens)]
+
+  type, val = tok = next_token!(tokens)
+  if type == :symbol
+    if BINOPS.include?(val)
+      [:binop, tok, lhs, parse_!(:expression, tokens)]
+    else # e.g. ')', ';', or ','
+      tokens << tok # put it back
+      lhs
+    end
+  else
+    raise "bad expression: #{val}"
   end
 end
 

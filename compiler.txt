@@ -1,6 +1,14 @@
 let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "do", "raise", "alloc");
 let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}");
-let BINOPS = _array("+", "-", "*", "==", "!=", "<", ">", "<=", ">=", "||", "&&");
+# line-ordered by precedence # @todo impl op precedence
+let BINOPS = _array(
+  ".",
+  "*",
+  "+", "-",
+  "==", "!=", "<", ">", "<=", ">=",
+  "&&",
+  "||"
+);
 let ALL_SYMBOLS = SYNTAX.concat(BINOPS);
 
 def is_symbol_character(char) {
@@ -92,7 +100,7 @@ def tokenize(text) {
         let ix1 = ix1 - 1; # redo
       }
     } else if (state == "IDENTIFIER") {
-      if ((char == ".") || (char == "_") || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
+      if ((char == "_") || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
         do buffer.push(char);
       } else {
         let val = buffer.join("");
@@ -198,58 +206,7 @@ def parse_(state, tokens) {
 
     return _array("LET", target, rhs);
   } else if (state == "EXPRESSION") {
-    alloc tok;
-    let tok = next_token_(tokens);
-    alloc type;
-    let type = _get(tok, 0);
-    alloc val;
-    let val = _get(tok, 1);
-
-    alloc lhs;
-    if (type == "STRING") {
-      let lhs = tok;
-    } else if (type == "INTEGER") {
-      let lhs = tok;
-    } else if (type == "RESERVED") {
-      if (false == ((val == "true") || (val == "false"))) {
-        raise "reserved word in expression: " + val;
-      }
-      let lhs = tok;
-    } else if (type == "IDENTIFIER") {
-      let tok2 = peek(tokens);
-      if (tok_eq(tok2, "SYMBOL", "(")) {
-        do tokens.push(tok); # put func name back
-        let lhs = parse_("CALL", tokens);
-      } else {
-        let lhs = tok;
-      }
-    } else if (type == "SYMBOL") {
-      if (tok_eq(tok, "SYMBOL", "(")) {
-        let lhs = parse_("EXPRESSION", tokens);
-        let paren_tok = next_token_(tokens);
-        if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
-          raise "missing ')': " + _get(paren_tok, 1);
-        }
-      }
-    } else {
-      raise "iae";
-    }
-
-    # do _print(_array("lhs", lhs, peek(tokens)));
-
-    let tok = next_token_(tokens);
-    let type = _get(tok, 0);
-    let val = _get(tok, 1);
-    if (type == "SYMBOL") {
-      if (BINOPS.includes(val)) {
-        return _array("BINOP", tok, lhs, parse_("EXPRESSION", tokens));
-      } else { # e.g. ')', ';', or ','
-        do tokens.push(tok); # put it back
-        return lhs;
-      }
-    } else {
-      raise "bad expression " + val;
-    }
+    return _parse_expression(0, tokens);
   } else if (state == "CALL") {
     alloc name_;
     let name_ = next_token_(tokens);
@@ -271,14 +228,14 @@ def parse_(state, tokens) {
 
     return _array("CALL", name_, args);
   } else if (state == "DO") {
-    let call = parse_("CALL", tokens);
+    let expr = parse_("EXPRESSION", tokens);
 
     let semi_tok = next_token_(tokens);
     if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
       raise "missing ';': " + _get(semi_tok, 1);
     }
 
-    return _array("DO", call);
+    return _array("DO", expr);
   } else if (state == "EXPLIST") {
     if (tok_eq(peek(tokens), "SYMBOL", ")")) {
       return _array();
@@ -424,6 +381,61 @@ def parse_(state, tokens) {
   }
 }
 
+def _parse_expression(precedence, tokens) {
+  alloc tok;
+  let tok = next_token_(tokens);
+  alloc type;
+  let type = _get(tok, 0);
+  alloc val;
+  let val = _get(tok, 1);
+
+  alloc lhs;
+  if (type == "STRING") {
+    let lhs = tok;
+  } else if (type == "INTEGER") {
+    let lhs = tok;
+  } else if (type == "RESERVED") {
+    if (false == ((val == "true") || (val == "false"))) {
+      raise "reserved word in expression: " + val;
+    }
+    let lhs = tok;
+  } else if (type == "IDENTIFIER") {
+    let tok2 = peek(tokens);
+    if (tok_eq(tok2, "SYMBOL", "(")) {
+      do tokens.push(tok); # put func name back
+      let lhs = parse_("CALL", tokens);
+    } else {
+      let lhs = tok;
+    }
+  } else if (type == "SYMBOL") {
+    if (tok_eq(tok, "SYMBOL", "(")) {
+      let lhs = parse_("EXPRESSION", tokens);
+      let paren_tok = next_token_(tokens);
+      if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
+        raise "missing ')': " + _get(paren_tok, 1);
+      }
+    }
+  } else {
+    raise "iae";
+  }
+
+  # do _print(_array("lhs", lhs, peek(tokens)));
+
+  let tok = next_token_(tokens);
+  let type = _get(tok, 0);
+  let val = _get(tok, 1);
+  if (type == "SYMBOL") {
+    if (BINOPS.includes(val)) {
+      return _array("BINOP", tok, lhs, parse_("EXPRESSION", tokens));
+    } else { # e.g. ')', ';', or ','
+      do tokens.push(tok); # put it back
+      return lhs;
+    }
+  } else {
+    raise "bad expression " + val;
+  }
+}
+
 def generate_code(node) {
   return codegen(node);
 }
@@ -516,9 +528,10 @@ def codegen(node) {
     let then_ = _leftpop(node);
     let else_ = _leftpop(node);
     let fst = "if ("+codegen(cond)+") {\n"+codegen(then_)+"\n}";
-    if (else_) {# @hack if else_ is undefined
+    if (else_) {
       let snd = " else {\n"+codegen(else_)+"\n}";
     } else {
+      # @hack if else_ is undefined
       let snd = "";
     }
     return fst + snd;
