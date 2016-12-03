@@ -1,14 +1,7 @@
 let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "do", "raise", "alloc");
 let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}");
-# line-ordered by precedence # @todo impl op precedence
-let BINOPS = _array(
-  ".",
-  "*",
-  "+", "-",
-  "==", "!=", "<", ">", "<=", ">=",
-  "&&",
-  "||"
-);
+let BINOPS = _array(   ".", "*", "+", "-", "==", "!=", "<", ">", "<=", ">=", "&&", "||");
+let BINOP_PREC = _array(0,   10,  20,  20,  30,   30,   30,  30,  30,   30,   40,   50);
 let ALL_SYMBOLS = SYNTAX.concat(BINOPS);
 
 def is_symbol_character(char) {
@@ -80,8 +73,7 @@ def tokenize(text) {
       } else {
         while (buffer.length != 0) {
           # do _print(_array("buffer", buffer));
-          let valid_prefixes = ALL_SYMBOLS.filter(validity_filter);
-          let valid_prefixes = valid_prefixes.sort(by_length); # hack b/c a.b().c() doesn't work
+          let valid_prefixes = ALL_SYMBOLS.filter(validity_filter).sort(by_length);
           if (valid_prefixes.length == 0) {
             raise "unrecognized symbols: " + buffer.join("");
           }
@@ -100,7 +92,7 @@ def tokenize(text) {
         let ix1 = ix1 - 1; # redo
       }
     } else if (state == "IDENTIFIER") {
-      if ((char == "_") || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
+      if (char == "_" || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
         do buffer.push(char);
       } else {
         let val = buffer.join("");
@@ -113,7 +105,7 @@ def tokenize(text) {
         let ix1 = ix1 - 1; # redo
       }
     } else if (state == "NONE") {
-      if ((char == " ") || (char == "\t") || (char == "\n")) {
+      if (char == " " || char == "\t" || char == "\n") {
         # no-op
       } else if (char == "#") {
         let state = "COMMENT";
@@ -124,7 +116,7 @@ def tokenize(text) {
         let state = "INTEGER";
         let buffer = _array();
         let ix1 = ix1 - 1; # redo
-      } else if ((char == "_") || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
+      } else if (char == "_" || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
         let state = "IDENTIFIER";
         let buffer = _array();
         let ix1 = ix1 - 1; # redo
@@ -206,7 +198,7 @@ def parse_(state, tokens) {
 
     return _array("LET", target, rhs);
   } else if (state == "EXPRESSION") {
-    return _parse_expression(0, tokens);
+    return _parse_expression_(tokens);
   } else if (state == "CALL") {
     alloc name_;
     let name_ = next_token_(tokens);
@@ -381,58 +373,94 @@ def parse_(state, tokens) {
   }
 }
 
-def _parse_expression(precedence, tokens) {
-  alloc tok;
+def _parse_expression_(tokens) {
+  # do _print(_array("_parse_expression_", peek(tokens)));
+
+  alloc op;
+  alloc op2;
+  alloc prec;
+  alloc prec2;
+  alloc lhs;
+  alloc rhs;
+
+  let lhs = _parse_operand_(tokens);
+  let op = next_token_(tokens);
+  let prec = _precedence(_get(op, 1));
+  if (prec == -1) {
+    do tokens.push(op); # put it back
+    return lhs;
+  }
+
+  while (true) {
+    let rhs = _parse_operand_(tokens);
+    let op2 = next_token_(tokens);
+    let prec2 = _precedence(_get(op2, 1));
+
+    if (prec2 == -1) {
+      do tokens.push(op2); # put it back
+      return _array("BINOP", op, lhs, rhs);
+    }
+
+    # do _print(_array("comparing", op, op2, prec, prec2));    
+    if (prec <= prec2) {
+      let lhs = _array("BINOP", op, lhs, rhs);
+      let op = op2;
+      let prec = prec2;
+    } else {
+      do tokens.push(op2);
+      do tokens.push(rhs);
+      return _array("BINOP", op, lhs, _parse_expression_(tokens));
+    }
+  }
+}
+
+def _parse_operand_(tokens) {
+  # do _print(_array("_parse_operand_", peek(tokens)));
+
   let tok = next_token_(tokens);
-  alloc type;
   let type = _get(tok, 0);
-  alloc val;
   let val = _get(tok, 1);
 
-  alloc lhs;
   if (type == "STRING") {
-    let lhs = tok;
+    return tok;
   } else if (type == "INTEGER") {
-    let lhs = tok;
+    return tok;
   } else if (type == "RESERVED") {
-    if (false == ((val == "true") || (val == "false"))) {
+    if (false == (val == "true" || val == "false")) {
       raise "reserved word in expression: " + val;
     }
-    let lhs = tok;
+    return tok;
   } else if (type == "IDENTIFIER") {
-    let tok2 = peek(tokens);
-    if (tok_eq(tok2, "SYMBOL", "(")) {
-      do tokens.push(tok); # put func name back
-      let lhs = parse_("CALL", tokens);
+    if (tok_eq(peek(tokens), "SYMBOL", "(")) {
+      do tokens.push(tok); # put fxn name back
+      return parse_("CALL", tokens);
     } else {
-      let lhs = tok;
+      return tok;
     }
   } else if (type == "SYMBOL") {
-    if (tok_eq(tok, "SYMBOL", "(")) {
+    if (tok_eq(tok, "SYMBOL", "-")) {
+      return _array("BINOP", tok, _array("INTEGER", "0"), _parse_operand_(tokens));
+    } else if (tok_eq(tok, "SYMBOL", "(")) {
       let lhs = parse_("EXPRESSION", tokens);
       let paren_tok = next_token_(tokens);
       if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
         raise "missing ')': " + _get(paren_tok, 1);
       }
+      return lhs;
+    } else {
+      raise "bad lhs: " + _get(tok, 1);
     }
   } else {
     raise "iae";
   }
+}
 
-  # do _print(_array("lhs", lhs, peek(tokens)));
-
-  let tok = next_token_(tokens);
-  let type = _get(tok, 0);
-  let val = _get(tok, 1);
-  if (type == "SYMBOL") {
-    if (BINOPS.includes(val)) {
-      return _array("BINOP", tok, lhs, parse_("EXPRESSION", tokens));
-    } else { # e.g. ')', ';', or ','
-      do tokens.push(tok); # put it back
-      return lhs;
-    }
+def _precedence(op_val) {
+  let ix = BINOPS.indexOf(op_val);
+  if (ix != -1) {
+    return _get(BINOP_PREC, ix);
   } else {
-    raise "bad expression " + val;
+    return -1;
   }
 }
 

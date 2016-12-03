@@ -3,15 +3,8 @@
 
 RESERVED = %w(true false let def if while return break do raise alloc)
 SYNTAX = %w(= ; ( ) , { })
-# line-ordered by precedence # @todo impl op precedence
-BINOPS = %w(
-  .
-  *
-  + -
-  == != < > <= >=
-  &&
-  ||
-)
+BINOPS = %w(    . *  +  -  == != <  >  <= >= && ||)
+BINOP_PREC = %w(0 10 20 20 30 30 30 30 30 30 40 50).map(&:to_i)
 ALL_SYMBOLS = SYNTAX + BINOPS
 
 def is_symbol_character(char)
@@ -55,7 +48,7 @@ def tokenize(text)
       if char =~ /\d/
         buffer << char
       else
-        tokens << [state, buffer.join] # @todo convert to int here? nah
+        tokens << [state, buffer.join]
         state = :none
         redo
       end
@@ -162,7 +155,7 @@ def parse_!(state, tokens)
     next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
     [:let, target, rhs]
   when :expression
-    _parse_expression!(0, tokens)
+    _parse_expression!(tokens)
   when :call # expression
     name_ = next_token!(tokens) { |type, val| raise "bad call name: #{val}" unless type == :identifier }
     next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
@@ -263,45 +256,76 @@ def parse_!(state, tokens)
   end
 end
 
-def _parse_expression!(precedence, tokens)
+def _parse_expression!(tokens)
+  # p ['_parse_expression!', peek(tokens)]
+
+  lhs = _parse_operand!(tokens)
+  op = next_token!(tokens)
+  prec = _precedence(op[1])
+  if prec.nil?
+    tokens << op # put it back
+    return lhs
+  end
+
+  loop do
+    rhs = _parse_operand!(tokens)
+    op2 = next_token!(tokens)
+    prec2 = _precedence(op2[1])
+    if prec2.nil?
+      tokens << op2 # put it back
+      return [:binop, op, lhs, rhs]
+    end
+    # p ["comparing", op[1], op2[1], prec, prec2]
+    if prec <= prec2
+      lhs = [:binop, op, lhs, rhs]
+      op = op2
+      prec = prec2
+    else
+      tokens << op2
+      tokens << rhs
+      return [:binop, op, lhs, _parse_expression!(tokens)]
+    end
+  end
+end
+
+def _parse_operand!(tokens)
+  # p ['_parse_operand!', peek(tokens)]
+
   type, val = tok = next_token!(tokens)
   case type
   when :string
-    lhs = tok
+    tok
   when :integer
-    lhs = tok
+    tok
   when :reserved
     raise "reserved word in expression: #{val}" unless val == 'true' or val == 'false'
-    lhs = tok
+    tok
   when :identifier
-    tok2 = peek(tokens)
-    if tok2 == [:symbol, '(']
-      tokens << tok # put func name back
-      lhs = parse_!(:call, tokens)
+    if peek(tokens) == [:symbol, '(']
+      tokens << tok # put fxn name back
+      parse_!(:call, tokens)
     else
-      lhs = tok
+      tok
     end
   when :symbol
-    if tok == [:symbol, '(']
+    if tok == [:symbol, '-']
+      [:binop, tok, [:integer, "0"], _parse_operand!(tokens)]
+    elsif tok == [:symbol, '(']
       lhs = parse_!(:expression, tokens)
       next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+      lhs
+    else
+      raise "bad lhs: #{tok[1]}"
     end
   else
     raise "iae"
   end
+end
 
-  # p ['lhs', lhs, peek(tokens)]
-
-  type, val = tok = next_token!(tokens)
-  if type == :symbol
-    if BINOPS.include?(val)
-      [:binop, tok, lhs, parse_!(:expression, tokens)]
-    else # e.g. ')', ';', or ','
-      tokens << tok # put it back
-      lhs
-    end
-  else
-    raise "bad expression: #{val}"
+def _precedence(op_val)
+  ix = BINOPS.find_index(op_val)
+  if ix
+    return BINOP_PREC[ix]
   end
 end
 
