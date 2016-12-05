@@ -2,7 +2,7 @@
 
 
 RESERVED = %w(true false let def if while return break do raise alloc)
-SYNTAX = %w(= ; ( ) , { })
+SYNTAX = %w(= ; ( ) , { } <<)
 BINOPS = %w(    . *  +  -  == != <  >  <= >= && ||)
 BINOP_PREC = %w(0 10 20 20 30 30 30 30 30 30 40 50).map(&:to_i)
 ALL_SYMBOLS = SYNTAX + BINOPS
@@ -33,6 +33,9 @@ def tokenize(text)
   $char = ""
   def next_char!
     $char_ix += 1
+    if $char_ix >= $chars.length
+      tokenize_error("Unexpected EOF", [-1, -1])
+    end
     $char_in_line += 1
     $char = $chars[$char_ix-1]
     if $char == "\n"
@@ -47,7 +50,31 @@ def tokenize(text)
       $char_in_line = -42 # @hack hard to know what it actually should be
     end
     $char_ix -= 1
+    if $char_ix < 0
+      raise "iae: sub-0 char index"
+    end
     $char = $chars[$char_ix-1]
+  end
+
+  def tokenize_heredoc(pos)
+    buffer = []
+    while $char =~ /[_a-zA-Z0-9]/
+      buffer << $char
+
+      next_char!
+    end
+    tokenize_error("bad heredoc header; expected \\n, got \"#{$char}\"", pos) unless $char == "\n"
+
+    target = buffer.clone
+    buffer.clear
+    while buffer.last(target.length) != target
+      buffer << $char
+
+      next_char!
+    end
+    prev_char! # put next char back
+
+    return [:string, buffer.join, pos]
   end
 
   buffer = []
@@ -118,6 +145,12 @@ def tokenize(text)
       while is_symbol_character($char)
         buffer << $char
 
+        if buffer == '<<'.chars # @hack the placement of the code is... awkward. the exit mechanism back into normal execution state is p weird too
+          next_char!
+          tokens << tokenize_heredoc(pos)
+          buffer.clear
+        end
+
         next_char!
       end
       prev_char! # put non-sym char back
@@ -139,7 +172,7 @@ def tokenize(text)
 
     next_char!
   end
-  # p tokens
+  p tokens
   tokens
 end
 
