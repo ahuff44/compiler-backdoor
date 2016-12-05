@@ -20,97 +20,102 @@ def tokenize(text)
   #   | (:string, String)
   #   | (:reserved, String)
 
-  state = :none
-  buffer = []
   chars = text.chars
-  chars << " " # extra char to allow buffers to clear
-  chars.each_with_object([]) do |char, tokens|
-    # p ["tokenize", char, state, buffer]
+  chars << "\n" # extra char to allow tokens to complete. Necessary esp for comments - infinite loop otherwise
 
-    case state
-    when :comment
-      if char == "\n"
-        state = :none
-      end
-    when :string
-      if char == "\\"
-        state = :escape_char
-      elsif char != "\""
-        buffer << char
-      else
-        tokens << [state, buffer.join]
-        state = :none
-      end
-    when :escape_char
-      buffer << generate_escape_code(char)
-      state = :string
-    when :integer
-      if char =~ /\d/
-        buffer << char
-      else
-        tokens << [state, buffer.join]
-        state = :none
-        redo
-      end
-    when :symbol
-      if is_symbol_character(char)
-        buffer << char
-      else
-        while !buffer.empty?
-          # p ['buffer', buffer]
-          valid_prefixes = ALL_SYMBOLS.select { |sym| buffer.join.start_with?(sym) }.sort_by(&:length)
-          if valid_prefixes.empty?
-            raise "unrecognized symbols: #{buffer.join}"
-          end
+  buffer = []
+  tokens = []
 
-          to_push = valid_prefixes.last # longest valid prefix
-          tokens << [state, to_push]
-          buffer.shift(to_push.length) # remove consumed chars from the buffer
-        end
-        state = :none
-        redo
+  ix = 0
+  char = chars[0]
+  while ix < chars.length
+    # p ["tokenize", char]
+
+    case char
+    when /\s/
+      # no-op
+    when '#'
+      ix += 1 # consume
+      char = chars[ix]
+
+      while char != "\n"
+        ix += 1
+        char = chars[ix]
       end
-    when :identifier
-      if char =~ /[_a-zA-Z0-9]/
-        buffer << char
-      else
-        val = buffer.join
-        if RESERVED.include?(val)
-          tokens << [:reserved, val]
+    when '"'
+      ix += 1 # consume
+      char = chars[ix]
+
+      buffer.clear
+      while char != '"'
+        if char == "\\"
+          # escape character
+          ix += 1
+          char = chars[ix]
+          buffer << generate_escape_code(char)
         else
-          tokens << [state, val]
+          buffer << char
         end
-        state = :none
-        redo # re-process this character; e.g. "+" in "3+4"
+
+        ix += 1
+        char = chars[ix]
       end
-    when :none
-      case char
-      when /\s/
-        # no-op
-      when '#'
-        state = :comment
-      when '"'
-        state = :string
-        buffer.clear
-      when /\d/
-        state = :integer
-        buffer.clear
-        redo
-      when /[_a-zA-Z]/
-        state = :identifier
-        buffer.clear
-        redo
-      when ->(c){is_symbol_character(c)}
-        state = :symbol
-        buffer.clear
-        redo
+      tokens << [:string, buffer.join]
+    when /\d/
+      buffer.clear
+      while char =~ /\d/
+        buffer << char
+
+        ix += 1
+        char = chars[ix]
+      end
+      ix -= 1 # put non \d char back
+      tokens << [:integer, buffer.join]
+    when /[_a-zA-Z]/
+      buffer.clear
+      while char =~ /[_a-zA-Z0-9]/
+        buffer << char
+
+        ix += 1
+        char = chars[ix]
+      end
+      ix -= 1 # put non-ident char back
+
+      val = buffer.join
+      if RESERVED.include?(val)
+        tokens << [:reserved, val]
       else
-        raise "unrecognized character: #{char}"
+        tokens << [:identifier, val]
+      end
+    when ->(c){is_symbol_character(c)}
+      buffer.clear
+      while is_symbol_character(char)
+        buffer << char
+
+        ix += 1
+        char = chars[ix]
+      end
+      ix -= 1 # put non-sym char back
+
+      while !buffer.empty?
+        # p ['buffer', buffer]
+        valid_prefixes = ALL_SYMBOLS.select { |sym| buffer.join.start_with?(sym) }.sort_by(&:length)
+        if valid_prefixes.empty?
+          raise "unrecognized symbols: #{buffer.join}"
+        end
+
+        to_push = valid_prefixes.last # longest valid prefix
+        tokens << [:symbol, to_push]
+        buffer.shift(to_push.length) # remove consumed chars from the buffer
       end
     else
-      raise "iae: illegal state: #{state}"
+      raise "unrecognized character: #{char}"
     end
+
+    ix += 1
+    char = chars[ix]
   end
+  tokens
 end
 
 def parse(tokens)
