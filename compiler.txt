@@ -94,7 +94,7 @@ def tokenize(text) {
   let tokens = _array();
 
   do next_char_();
-  while (char_ix < text.length) {
+  while (char_ix < chars.length) {
     # do _print(_array("tokenize", _array(char_ix, line_ix, char_in_line, char, peek(tokens))));
 
     if (char == " " || char == "\t" || char == "\n") {
@@ -161,7 +161,6 @@ def tokenize(text) {
         do buffer.push(char);
 
         if (_get(buffer, 0) == "<" && _get(buffer, 1) == "<" && buffer.length == 2){ # @hack the placement of the code is... awkward. the exit mechanism back into normal execution state is p weird too
-
           do next_char_();
           do tokens.push(tokenize_heredoc(pos));
           let buffer = _array();
@@ -210,7 +209,7 @@ def tokenize(text) {
 
     do next_char_();
   }
-  # do _print(tokens);
+  # do _print(_array("tokens", tokens));
   return tokens;
 }
 

@@ -170,7 +170,7 @@ def tokenize(text)
 
     next_char!
   end
-  # p tokens
+  # p ["tokens", tokens]
   tokens
 end
 
@@ -335,7 +335,7 @@ def _parse_expression!(tokens)
   lhs = _parse_operand!(tokens)
   op = next_token!(tokens)
   prec = _precedence(op[1])
-  if prec.nil?
+  if prec == -1
     tokens << op # put it back
     return lhs
   end
@@ -344,7 +344,7 @@ def _parse_expression!(tokens)
     rhs = _parse_operand!(tokens)
     op2 = next_token!(tokens)
     prec2 = _precedence(op2[1])
-    if prec2.nil?
+    if prec2 == -1
       tokens << op2 # put it back
       return [:binop, op, lhs, rhs]
     end
@@ -403,7 +403,9 @@ end
 def _precedence(op_val)
   ix = BINOPS.find_index(op_val)
   if ix
-    return BINOP_PREC[ix]
+    BINOP_PREC[ix]
+  else
+    -1 # @hack ? to be parallel with the other compiler
   end
 end
 
