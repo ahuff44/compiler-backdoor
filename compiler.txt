@@ -65,6 +65,7 @@ def tokenize(text, logging) {
     if (char != "\n") {
       do tokenize_error("bad heredoc header; expected \\n, got \""+char+"\"", pos);
     }
+    do next_char_(); # skip \n
 
     def array_eq(arr1, arr2) {
       if (arr1.length != arr2.length) {
@@ -80,15 +81,23 @@ def tokenize(text, logging) {
       return true;
     }
 
+    let target = _array("\n").concat(target);
+    do target.push("\n");
     let buffer = _array();
     while (false == array_eq(buffer.slice(-target.length), target)) {
-      do buffer.push(char);
+      if (char) {
+        do buffer.push(char);
+      } else {
+        #@hack
+        do tokenize_error("unexpected EOF", _array(-1, -1));
+      }
 
       do next_char_();
     }
     do prev_char_(); # put next char back
 
-    return _array("STRING", buffer.join(""), pos);
+    let str = buffer.slice(0, buffer.length-target.length).join("");
+    return _array("STRING", str, pos);
   }
 
   let buffer = _array();

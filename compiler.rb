@@ -55,24 +55,32 @@ def tokenize(text, logging)
   end
 
   def tokenize_heredoc(pos)
-    buffer = []
+    target = []
     while $char =~ /[_a-zA-Z0-9]/
-      buffer << $char
+      target << $char
 
       next_char!
     end
     tokenize_error("bad heredoc header; expected \\n, got \"#{$char}\"", pos) unless $char == "\n"
+    next_char! # skip \n
 
-    target = buffer.clone
-    buffer.clear
+    target = ["\n"] + target
+    target << "\n"
+    buffer = []
     while buffer.last(target.length) != target
-      buffer << $char
+      if $char
+        buffer << $char
+      else
+        #@hack
+        tokenize_error("unexpected EOF", [-1, -1])
+      end
 
       next_char!
     end
     prev_char! # put next char back
 
-    return [:string, buffer.join, pos]
+    str = buffer.slice(0, buffer.length-target.length).join
+    return [:string, str, pos]
   end
 
   buffer = []
