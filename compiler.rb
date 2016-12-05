@@ -18,7 +18,7 @@ def tokenize_error(msg, pos)
   exit 1
 end
 
-def tokenize(text)
+def tokenize(text, logging)
   # tokenize :: String -> [ Token ]
   # Token
   #   = (:integer, Integer)
@@ -80,7 +80,9 @@ def tokenize(text)
 
   next_char!
   while $char_ix < $chars.length
-    # p ["tokenize", $char_ix, $line_ix, $char_in_line, $char, peek(tokens)]
+    if logging
+      p ["tokenize", $char_ix, $line_ix, $char_in_line, $char, peek(tokens)]
+    end
 
     case $char
     when /\s/
@@ -170,11 +172,13 @@ def tokenize(text)
 
     next_char!
   end
-  # p ["tokens", tokens]
+  if logging
+    p ["tokens", tokens]
+  end
   tokens
 end
 
-def parse(tokens)
+def parse_entrypoint(tokens)
   tokens = tokens.reverse # makes next_token! etc easier
   ast = []
   while !peek(tokens).nil?
@@ -200,7 +204,7 @@ def peek(tokens)
 end
 
 def tok_match(tok, target)
-  return (tok[0] == target[0] and tok[1] == target[1])
+  return (!tok.nil? and tok[0] == target[0] and tok[1] == target[1])
 end
 
 def parse_error(msg, tok)
@@ -561,10 +565,10 @@ end
 infile, outfile = ARGV
 text = File.read(infile)
 # puts "\ntext loaded:\n#{text}"
-tokens = tokenize(text)
+tokens = tokenize(text, false)
 File.write("ahuff/main_tokens.txt", _tokens_to_string(tokens)) # @debug
 # puts "\ntokens:\n#{tokens}"
-ast = parse(tokens)
+ast = parse_entrypoint(tokens)
 File.write("ahuff/main_ast.txt", ast) # @debug
 # puts "\nast:\n#{ast}"
 code = generate_code(ast)

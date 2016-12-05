@@ -31,3 +31,6 @@ def f(x) {
   let y = g(x*2);
   do _print(y);
 }
+let x = <<EOF
+howdy " '
+EOF

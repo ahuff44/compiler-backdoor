@@ -20,9 +20,10 @@ def tokenize_error(msg, pos) {
   let line = _leftpop(pos);
   let char = _leftpop(pos);
   do _print("Tokenization error at "+line+":"+char+":\n\t"+msg);
+  do _EXIT(1);
 }
 
-def tokenize(text) {
+def tokenize(text, logging) {
   alloc char_ix;
   alloc line_ix;
   alloc char_in_line;
@@ -95,7 +96,9 @@ def tokenize(text) {
 
   do next_char_();
   while (char_ix < chars.length) {
-    # do _print(_array("tokenize", _array(char_ix, line_ix, char_in_line, char, peek(tokens))));
+    if (logging) {
+      do _print(_array("tokenize", _array(char_ix, line_ix, char_in_line, char, peek(tokens))));
+    }
 
     if (char == " " || char == "\t" || char == "\n") {
       # no-op
@@ -209,7 +212,10 @@ def tokenize(text) {
 
     do next_char_();
   }
-  # do _print(_array("tokens", tokens));
+  if (logging) {
+    do _print("tokens:");
+    do _print(tokens);
+  }
   return tokens;
 }
 
@@ -218,7 +224,7 @@ def parse_entrypoint(tokens) {
 
   alloc ast;
   let ast = _array();
-  while (peek(tokens)) { # @hack if undefined
+  while (peek(tokens)) { # @hack: while not undefined
     do ast.push(parse_("STATEMENT", tokens));
   }
 
@@ -244,7 +250,7 @@ def peek(tokens) {
 }
 
 def tok_match(tok, type, val) {
-  return _get(tok, 0) == type && _get(tok, 1) == val;
+  return tok && _get(tok, 0) == type && _get(tok, 1) == val;
 }
 
 def parse_error(msg, tok) {
@@ -767,7 +773,7 @@ let _ = _ARGV();
 let infile = _get(_, 0);
 let outfile = _get(_, 1);
 let text = _readFile(infile);
-let tokens = tokenize(text);
+let tokens = tokenize(text, false);
 do _writeFile("ahuff/boot_tokens.txt", _tokens_to_string(tokens));
 let ast = parse_entrypoint(tokens);
 do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
