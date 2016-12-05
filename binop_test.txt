@@ -13,3 +13,4 @@ if (1 == 1) {}
 do a.b();
 
 let x = a.b(-2, c, -1);
+let x = foo() == 2 && bar.baz() == 1;

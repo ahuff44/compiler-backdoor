@@ -41,12 +41,12 @@ def tokenize(text)
     end
   end
   def prev_char!
+    $char_in_line -= 1
     if $char == "\n"
       $line_ix -= 1
       $char_in_line = -42 # @hack hard to know what it actually should be
     end
     $char_ix -= 1
-    $char_in_line -= 1
     $char = $chars[$char_ix-1]
   end
 
@@ -356,8 +356,11 @@ def _parse_operand!(tokens)
     else
       parse_error("bad lhs", tok)
     end
+  when :call
+    # @hack this happens when a :call "token" is pushed back onto the tokens stack b/c of operator precedence
+    tok
   else
-    raise "iae"
+    raise "iae: _parse_operand! type=#{type}"
   end
 end
 
@@ -416,6 +419,9 @@ def codegen(node)
       "console.log(#{codegen(val)})"
     when '_ARGV'
       "process.argv.slice(2)"
+    when '_EXIT'
+      val, = args;
+      "process.exit(#{codegen(val)})"
     else
       "#{name_str}(#{codegen_list(args, ', ')})"
     end

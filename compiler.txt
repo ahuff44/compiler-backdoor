@@ -15,6 +15,12 @@ let DIGITS = _array("0","1","2","3","4","5","6","7","8","9");
 let LOWERCASE = _array("a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z");
 let UPPERCASE = _array("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z");
 
+def tokenize_error(msg, pos) {
+  let line = _leftpop(pos);
+  let char = _leftpop(pos);
+  do _print("Tokenization error at "+line+":"+char+":\n\t"+msg);
+}
+
 def tokenize(text) {
   alloc char_ix;
   alloc line_ix;
@@ -35,13 +41,13 @@ def tokenize(text) {
     }
   }
   def prev_char_(){
-    let char_ix = char_ix - 1;
     let char_in_line = char_in_line - 1;
-    let char = _get(chars, char_ix - 1);
     if (char == "\n") {
       let line_ix = line_ix - 1;
       let char_in_line = -42; # @hack hard to know what it actually should be
     }
+    let char_ix = char_ix - 1;
+    let char = _get(chars, char_ix - 1);
   }
 
   let buffer = _array();
@@ -49,7 +55,7 @@ def tokenize(text) {
 
   do next_char_();
   while (char_ix < text.length) {
-    # do _print(_array("tokenize", _array(char_ix, char, peek(tokens))));
+    # do _print(_array("tokenize", _array(char_ix, line_ix, char_in_line, char, peek(tokens))));
 
     if (char == " " || char == "\t" || char == "\n") {
       # no-op
@@ -60,6 +66,8 @@ def tokenize(text) {
         do next_char_();
       }
     } else if (char == "\"") {
+      let pos = _array(line_ix, char_in_line);
+
       do next_char_(); # consume
 
       let buffer = _array();
@@ -75,8 +83,10 @@ def tokenize(text) {
         do next_char_();
       }
 
-      do tokens.push(_array("STRING", buffer.join("")));
+      do tokens.push(_array("STRING", buffer.join(""), pos));
     } else if (DIGITS.includes(char)) {
+      let pos = _array(line_ix, char_in_line);
+
       let buffer = _array();
       while (DIGITS.includes(char)) {
         do buffer.push(char);
@@ -85,8 +95,10 @@ def tokenize(text) {
       }
       do prev_char_(); # put non \d char back
 
-      do tokens.push(_array("INTEGER", buffer.join("")));
+      do tokens.push(_array("INTEGER", buffer.join(""), pos));
     } else if (char == "_" || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
+      let pos = _array(line_ix, char_in_line);
+
       let buffer = _array();
       while (char == "_" || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
         do buffer.push(char);
@@ -97,11 +109,13 @@ def tokenize(text) {
 
       let val = buffer.join("");
       if (RESERVED.includes(val)) {
-        do tokens.push(_array("RESERVED", val));
+        do tokens.push(_array("RESERVED", val, pos));
       } else {
-        do tokens.push(_array("IDENTIFIER", val));
+        do tokens.push(_array("IDENTIFIER", val, pos));
       }
     } else if (is_symbol_character(char)) {
+      let pos = _array(line_ix, char_in_line);
+
       let buffer = _array();
       while (is_symbol_character(char)) {
         do buffer.push(char);
@@ -130,11 +144,11 @@ def tokenize(text) {
         # do _print(_array("buffer", buffer));
         let valid_prefixes = ALL_SYMBOLS.filter(validity_filter).sort(by_length);
         if (valid_prefixes.length == 0) {
-          raise "unrecognized symbols: " + buffer.join("");
+          do tokenize_error("cannot parse \""+buffer.join("")+"\" into symbols", pos);
         }
 
         let to_push = valid_prefixes.pop();
-        do tokens.push(_array("SYMBOL", to_push));
+        do tokens.push(_array("SYMBOL", to_push, pos)); # @todo: fix pos; won't always be correct
 
         # buffer.shift(to_push.length)
         let ix2 = 0;
@@ -144,11 +158,12 @@ def tokenize(text) {
         }
       }
     } else {
-      raise "unrecognized character: " + char;
+      do tokenize_error("unrecognized character: "+char, pos);
     }
 
     do next_char_();
   }
+  # do _print(tokens);
   return tokens;
 }
 
@@ -159,7 +174,7 @@ def parse_entrypoint(tokens) {
   do tokens.reverse(); # convinient for next_token_ etc
   let ast = parse_("SCOPE", tokens);
   if (tokens.length != 0) {
-    raise "trailing tokens";
+    do parse_error("expected EOF", peek(tokens));
   } else {
     return ast;
   }
@@ -173,8 +188,20 @@ def peek(tokens) {
   return _get(tokens, tokens.length - 1);
 }
 
-def tok_eq(tok1, sym, val) {
-  return (_get(tok1, 0) == sym) && (_get(tok1, 1) == val);
+def tok_match(tok, type, val) {
+  return _get(tok, 0) == type && _get(tok, 1) == val;
+}
+
+def parse_error(msg, tok) {
+  let type = _leftpop(tok);
+  let val = _leftpop(tok);
+  let pos = _leftpop(tok);
+
+  let line = _leftpop(pos);
+  let char = _leftpop(pos);
+
+  do _print("Parse error at "+line+":"+char+" (\""+val+"\"):\n\t"+msg);
+  do _EXIT(1);
 }
 
 def parse_(state, tokens) {
@@ -182,13 +209,13 @@ def parse_(state, tokens) {
 
   if (state == "SCOPE") {
     let tok = next_token_(tokens);
-    if (false == tok_eq(tok, "SYMBOL", "{")) {
-      raise "scope missing '{': " + _get(tok, 1);
+    if (false == tok_match(tok, "SYMBOL", "{")) {
+      do parse_error("scope missing '{'", tok);
     }
     alloc ast;
     let ast = _array();
     while (true) {
-      if (tok_eq(peek(tokens), "SYMBOL", "}")) {
+      if (tok_match(peek(tokens), "SYMBOL", "}")) {
         do next_token_(tokens);
         return _array("SCOPE", ast);
       }
@@ -198,19 +225,19 @@ def parse_(state, tokens) {
     alloc target;
     let target = next_token_(tokens);
     if (false == (_get(target, 0) == "IDENTIFIER")) {
-      raise "bad let target: " + _get(tok, 1);
+      do parse_error("bad let target", target);
     }
 
     let tok = next_token_(tokens);
-    if (false == tok_eq(tok, "SYMBOL", "=")) {
-      raise "missing '=': " + _get(tok, 1);
+    if (false == tok_match(tok, "SYMBOL", "=")) {
+      do parse_error("missing '='", tok);
     }
 
     let rhs = parse_("EXPRESSION", tokens);
 
     let tok = next_token_(tokens);
-    if (false == tok_eq(tok, "SYMBOL", ";")) {
-      raise "missing ';': " + _get(tok, 1);
+    if (false == tok_match(tok, "SYMBOL", ";")) {
+      do parse_error("missing ';'", tok);
     }
 
     return _array("LET", target, rhs);
@@ -220,19 +247,19 @@ def parse_(state, tokens) {
     alloc name_;
     let name_ = next_token_(tokens);
     if (_get(name_, 0) != "IDENTIFIER") {
-      raise "bad call name: " + _get(name_, 1);
+      do parse_error("bad call name", name_);
     }
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
-      raise "missing '(': " + _get(paren_tok, 1);
+    if (false == tok_match(paren_tok, "SYMBOL", "(")) {
+      do parse_error("missing '('", paren_tok);
     }
 
     let args = parse_("EXPLIST", tokens);
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
-      raise "missing ')': " + _get(paren_tok, 1);
+    if (false == tok_match(paren_tok, "SYMBOL", ")")) {
+      do parse_error("missing ')'", paren_tok);
     }
 
     return _array("CALL", name_, args);
@@ -240,13 +267,13 @@ def parse_(state, tokens) {
     let expr = parse_("EXPRESSION", tokens);
 
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
-      raise "missing ';': " + _get(semi_tok, 1);
+    if (false == tok_match(semi_tok, "SYMBOL", ";")) {
+      do parse_error("missing ';'", semi_tok);
     }
 
     return _array("DO", expr);
   } else if (state == "EXPLIST") {
-    if (tok_eq(peek(tokens), "SYMBOL", ")")) {
+    if (tok_match(peek(tokens), "SYMBOL", ")")) {
       return _array();
     } else {
       alloc buffer;
@@ -254,27 +281,27 @@ def parse_(state, tokens) {
       while (true) {
         do buffer.push(parse_("EXPRESSION", tokens));
         let popped = next_token_(tokens);
-        if (false == tok_eq(popped, "SYMBOL", ",")) {
+        if (false == tok_match(popped, "SYMBOL", ",")) {
           do tokens.push(popped); # return the token
           return buffer;
         }
       }
     }
   } else if (state == "ARGLIST") {
-    if (tok_eq(peek(tokens), "SYMBOL", ")")) {
+    if (tok_match(peek(tokens), "SYMBOL", ")")) {
       return _array();
     } else {
       let buffer = _array();
       while (true) {
         let tok = next_token_(tokens);
         if (_get(tok, 0) != "IDENTIFIER") {
-          raise "bad arg: " + _get(tok, 1);
+          do parse_error("bad arg", tok);
         }
         do buffer.push(tok);
         let popped = next_token_(tokens);
-        if (false == tok_eq(popped, "SYMBOL", ",")) {
+        if (false == tok_match(popped, "SYMBOL", ",")) {
           do tokens.push(popped); # return the token
-            return buffer;
+          return buffer;
         }
       }
     }
@@ -282,20 +309,20 @@ def parse_(state, tokens) {
     alloc name_;
     let name_ = next_token_(tokens);
     if (_get(name_, 0) != "IDENTIFIER") {
-      raise "bad function name: " + _get(name_, 1);
+      do parse_error("bad function name", name_);
     }
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
-      raise "def '" + _get(name_, 1) + "' missing '(': " + _get(paren_tok, 1);
+    if (false == tok_match(paren_tok, "SYMBOL", "(")) {
+      do parse_error("def '"+_get(name_, 1)+"' missing '('", paren_tok);
     }
 
     alloc params;
     let params = parse_("ARGLIST", tokens);
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
-      raise "def '" + _get(name_, 1) + "' missing ')': " + _get(paren_tok, 1);
+    if (false == tok_match(paren_tok, "SYMBOL", ")")) {
+      do parse_error("def '"+_get(name_, 1)+"' missing ')'", paren_tok);
     }
 
     let body = parse_("SCOPE", tokens);
@@ -306,28 +333,28 @@ def parse_(state, tokens) {
     alloc else_;
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", "(")) {
-      raise "'if' missing '(': " + _get(paren_tok, 1);
+    if (false == tok_match(paren_tok, "SYMBOL", "(")) {
+      do parse_error("'if' missing '('", paren_tok);
     }
 
     let cond = parse_("EXPRESSION", tokens);
 
     let paren_tok = next_token_(tokens);
-    if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
-      raise "'if' missing ')': " + _get(paren_tok, 1);
+    if (false == tok_match(paren_tok, "SYMBOL", ")")) {
+      do parse_error("'if' missing ')'", paren_tok);
     }
 
     let then_ = parse_("SCOPE", tokens);
 
-    if (tok_eq(peek(tokens), "IDENTIFIER", "else")) {
+    if (tok_match(peek(tokens), "IDENTIFIER", "else")) {
       do next_token_(tokens); # consume 'else'
-      if (tok_eq(peek(tokens), "SYMBOL", "{")) {
+      if (tok_match(peek(tokens), "SYMBOL", "{")) {
         let else_ = parse_("SCOPE", tokens);
-      } else if (tok_eq(peek(tokens), "RESERVED", "if")) {
+      } else if (tok_match(peek(tokens), "RESERVED", "if")) {
         do next_token_(tokens); # consume 'if'
         let else_ = parse_("IF", tokens);
       } else {
-        raise "bad 'else' branch: " + peek(_get(tokens, 1));
+        do parse_error("bad 'else' branch", peek(tokens));
       }
     } # @hack: else_ will be undefined if this branch is not taken
     return _array("IF", cond, then_, else_);
@@ -340,32 +367,32 @@ def parse_(state, tokens) {
   } else if (state == "RETURN") {
     let val = parse_("EXPRESSION", tokens);
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
-      raise "missing ';': " + _get(semi_tok, 1);
+    if (false == tok_match(semi_tok, "SYMBOL", ";")) {
+      do parse_error("missing ';'", semi_tok);
     }
     return _array("RETURN", val);
   } else if (state == "BREAK") {
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
-      raise "missing ';': " + _get(semi_tok, 1);
+    if (false == tok_match(semi_tok, "SYMBOL", ";")) {
+      do parse_error("missing ';'", semi_tok);
     }
     return _array("BREAK");
   } else if (state == "RAISE") {
     let val = parse_("EXPRESSION", tokens);
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
-      raise "missing ';': " + _get(semi_tok, 1);
+    if (false == tok_match(semi_tok, "SYMBOL", ";")) {
+      do parse_error("missing ';'", semi_tok);
     }
     return _array("RAISE", val);
   } else if (state == "ALLOC") {
     let target = next_token_(tokens);
     if (_get(target, 0) != "IDENTIFIER") {
-      raise "bad alloc target: " + _get(target, 1);
+      do parse_error("bad alloc target", target);
     }
 
     let semi_tok = next_token_(tokens);
-    if (false == tok_eq(semi_tok, "SYMBOL", ";")) {
-      raise "missing ';': " + _get(semi_tok, 1);
+    if (false == tok_match(semi_tok, "SYMBOL", ";")) {
+      do parse_error("missing ';'", semi_tok);
     }
 
     return _array("ALLOC", target);
@@ -378,15 +405,16 @@ def parse_(state, tokens) {
       if (STATEMENT_STARTERS.includes(val)) {
         return parse_(val.toUpperCase(), tokens);
       } else {
-        raise "unknown reserved word: " + val;
+        do parse_error("unknown reserved word", tok);
       }
     } else if (type) {
-      raise "unexpected statement starting at: " + val + "; next token is: " + peek(tokens);
-    } else { # @hack for type == undefined
-      raise "unexpected end of input";
+      do parse_error("unexpected statement", tok);
+    } else {
+      # @hack for type == undefined
+      do parse_error("unexpected end of input", tok); # @todo I doubt this works; it'll probs throw a ruby error instead. maybe move into next_token! ?
     }
   } else {
-    raise "unimplemented state: " + state;
+    raise "iae: unimplemented state: " + state;
   }
 }
 
@@ -437,6 +465,7 @@ def _parse_operand_(tokens) {
   let tok = next_token_(tokens);
   let type = _get(tok, 0);
   let val = _get(tok, 1);
+  let pos = _get(tok, 2);
 
   if (type == "STRING") {
     return tok;
@@ -444,31 +473,34 @@ def _parse_operand_(tokens) {
     return tok;
   } else if (type == "RESERVED") {
     if (false == (val == "true" || val == "false")) {
-      raise "reserved word in expression: " + val;
+      do parse_error("reserved word in expression", tok);
     }
     return tok;
   } else if (type == "IDENTIFIER") {
-    if (tok_eq(peek(tokens), "SYMBOL", "(")) {
+    if (tok_match(peek(tokens), "SYMBOL", "(")) {
       do tokens.push(tok); # put fxn name back
       return parse_("CALL", tokens);
     } else {
       return tok;
     }
   } else if (type == "SYMBOL") {
-    if (tok_eq(tok, "SYMBOL", "-")) {
+    if (tok_match(tok, "SYMBOL", "-")) {
       return _array("BINOP", tok, _array("INTEGER", "0"), _parse_operand_(tokens));
-    } else if (tok_eq(tok, "SYMBOL", "(")) {
+    } else if (tok_match(tok, "SYMBOL", "(")) {
       let lhs = parse_("EXPRESSION", tokens);
       let paren_tok = next_token_(tokens);
-      if (false == tok_eq(paren_tok, "SYMBOL", ")")) {
-        raise "missing ')': " + _get(paren_tok, 1);
+      if (false == tok_match(paren_tok, "SYMBOL", ")")) {
+        do parse_error("missing ')'", paren_tok);
       }
       return lhs;
     } else {
-      raise "bad lhs: " + _get(tok, 1);
+      do parse_error("bad lhs", tok);
     }
+  } else if (type == "CALL") {
+    # @hack this happens when a :call "token" is pushed back onto the tokens stack b/c of operator precedence
+    return tok;
   } else {
-    raise "iae";
+    raise "iae: _parse_operand! type="+type;
   }
 }
 
@@ -547,6 +579,9 @@ def codegen(node) {
       return "console.log("+codegen(val)+")";
     } else if (name_str == "_ARGV") {
       return "process.argv.slice(2)";
+    } else if (name_str == "_EXIT") {
+      let val = _leftpop(args);
+      return "process.exit("+codegen(val)+")";
     } else {
       return name_str+"("+codegen_list(args, ", ")+")";
     }
@@ -600,21 +635,26 @@ def codegen(node) {
     return "let "+codegen(target)+";";
   } else if (node_type == "INTEGER") {
     let val = _leftpop(node);
+    let pos = _leftpop(node);
     return "" + val;
   } else if (node_type == "STRING") {
     let val = _leftpop(node);
+    let pos = _leftpop(node);
     return "\""+string_escape(val)+"\"";
   } else if (node_type == "RESERVED") {
     let word = _leftpop(node);
+    let pos = _leftpop(node);
     return word;
   } else if (node_type == "SYMBOL") {
     let val = _leftpop(node);
+    let pos = _leftpop(node);
     if (val == "==") {
       let val = "===";
     }
     return val;
   } else if (node_type == "IDENTIFIER") {
     let varname = _leftpop(node);
+    let pos = _leftpop(node);
     return varname;
   } else {
     raise "iae: unrecognized node type: " + node_type;
@@ -658,6 +698,7 @@ def string_escape(str) {
 def _tok_to_string(tok) {
   let type = _get(tok, 0);
   let val = _get(tok, 1);
+  let pos = _get(tok, 2);
   let val_to_print = string_escape(val);
 
   return "[ :" + type + ", \"" + val_to_print + "\" ],";
