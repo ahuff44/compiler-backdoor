@@ -27,9 +27,9 @@ def tokenize(text)
   tokens = []
 
   ix = 0
-  char = chars[0]
+  char = chars[ix]
   while ix < chars.length
-    # p ["tokenize", char]
+    # p ["tokenize", char, peek(tokens)]
 
     case char
     when /\s/
