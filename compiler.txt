@@ -494,7 +494,9 @@ def _parse_operand_(tokens) {
     }
   } else if (type == "SYMBOL") {
     if (tok_match(tok, "SYMBOL", "-")) {
-      return _array("BINOP", tok, _array("INTEGER", "0"), _parse_operand_(tokens));
+      # @hack
+      do tokens.push(tok); # put '-' back
+      return _array("INTEGER", "0", pos);
     } else if (tok_match(tok, "SYMBOL", "(")) {
       let lhs = parse_("EXPRESSION", tokens);
       let paren_tok = next_token_(tokens);

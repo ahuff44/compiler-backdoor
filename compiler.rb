@@ -386,7 +386,9 @@ def _parse_operand!(tokens)
     end
   when :symbol
     if tok_match(tok, [:symbol, '-'])
-      [:binop, tok, [:integer, "0"], _parse_operand!(tokens)]
+      # @hack
+      tokens << tok # put '-' back
+      [:integer, "0", pos]
     elsif tok_match(tok, [:symbol, '('])
       lhs = parse_!(:expression, tokens)
       next_token!(tokens) { |tok| parse_error("missing ')'", tok) unless tok_match(tok, [:symbol, ')']) }
