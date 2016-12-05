@@ -20,66 +20,70 @@ def tokenize(text)
   #   | (:string, String)
   #   | (:reserved, String)
 
-  chars = text.chars
-  chars << "\n" # extra char to allow tokens to complete. Necessary esp for comments - infinite loop otherwise
+  $char_ix = -1
+  $line_ix = 0
+  $char_in_line = -1
+  $chars = (text+"\n").chars # extra char to allow tokens to complete. Necessary esp for comments - infinite loop otherwise
+  $char = ""
+  def next_char!
+    $char_ix += 1
+    $char_in_line += 1
+    $char = $chars[$char_ix]
+    if $char == "\n"
+      $line_ix += 1
+      $char_in_line = -1
+    end
+  end
 
   buffer = []
   tokens = []
 
-  ix = 0
-  char = chars[ix]
-  while ix < chars.length
-    # p ["tokenize", char, peek(tokens)]
+  next_char!
+  while $char_ix < $chars.length
+    # p ["tokenize", $char_ix, $char, peek(tokens)]
 
-    case char
+    case $char
     when /\s/
       # no-op
     when '#'
-      ix += 1 # consume
-      char = chars[ix]
+      next_char # consume
 
-      while char != "\n"
-        ix += 1
-        char = chars[ix]
+      while $char != "\n"
+        next_char!
       end
     when '"'
-      ix += 1 # consume
-      char = chars[ix]
+      next_char! # consume
 
       buffer.clear
-      while char != '"'
-        if char == "\\"
+      while $char != '"'
+        if $char == "\\"
           # escape character
-          ix += 1
-          char = chars[ix]
-          buffer << generate_escape_code(char)
+          next_char!
+          buffer << generate_escape_code($char)
         else
-          buffer << char
+          buffer << $char
         end
 
-        ix += 1
-        char = chars[ix]
+        next_char!
       end
       tokens << [:string, buffer.join]
     when /\d/
       buffer.clear
-      while char =~ /\d/
-        buffer << char
+      while $char =~ /\d/
+        buffer << $char
 
-        ix += 1
-        char = chars[ix]
+        next_char!
       end
-      ix -= 1 # put non \d char back
+      $char_ix -= 1 # put non \d char back
       tokens << [:integer, buffer.join]
     when /[_a-zA-Z]/
       buffer.clear
-      while char =~ /[_a-zA-Z0-9]/
-        buffer << char
+      while $char =~ /[_a-zA-Z0-9]/
+        buffer << $char
 
-        ix += 1
-        char = chars[ix]
+        next_char!
       end
-      ix -= 1 # put non-ident char back
+      $char_ix -= 1 # put non-ident char back
 
       val = buffer.join
       if RESERVED.include?(val)
@@ -89,13 +93,12 @@ def tokenize(text)
       end
     when ->(c){is_symbol_character(c)}
       buffer.clear
-      while is_symbol_character(char)
-        buffer << char
+      while is_symbol_character($char)
+        buffer << $char
 
-        ix += 1
-        char = chars[ix]
+        next_char!
       end
-      ix -= 1 # put non-sym char back
+      $char_ix -= 1 # put non-sym char back
 
       while !buffer.empty?
         # p ['buffer', buffer]
@@ -112,8 +115,7 @@ def tokenize(text)
       raise "unrecognized character: #{char}"
     end
 
-    ix += 1
-    char = chars[ix]
+    next_char!
   end
   tokens
 end
