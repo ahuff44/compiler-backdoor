@@ -626,6 +626,14 @@ def codegen(node) {
       let arr = _leftpop(args);
       let ix = _leftpop(args);
       return codegen(arr)+"["+codegen(ix)+"]";
+    } else if (name_str == "_set") {
+      alloc arr;
+      alloc ix;
+      alloc data;
+      let arr = _leftpop(args);
+      let ix = _leftpop(args);
+      let data = _leftpop(args);
+      return codegen(arr)+"["+codegen(ix)+"] = "+codegen(data);
     } else if (name_str == "_readFile") {
       let fname = _leftpop(args);
       return "require('fs').readFileSync("+codegen(fname)+", 'utf-8')";

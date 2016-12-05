@@ -450,6 +450,9 @@ def codegen(node)
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
+    when '_set'
+      arr, ix, data = args
+      "#{codegen(arr)}[#{codegen(ix)}] = #{codegen(data)}"
     when '_readFile'
       fname, = args
       "require('fs').readFileSync(#{codegen(fname)}, 'utf-8')"
