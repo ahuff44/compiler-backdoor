@@ -16,46 +16,63 @@ let LOWERCASE = _array("a","b","c","d","e","f","g","h","i","j","k","l","m","n","
 let UPPERCASE = _array("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z");
 
 def tokenize(text) {
-  let buffer = _array();
-  let chars = text + " ";
-
-  let tokens = _array();
-  let buffer = _array();
-
-  alloc ix;
+  alloc char_ix;
+  alloc line_ix;
+  alloc char_in_line;
   alloc char;
-  let ix = 0;
-  let char = _get(chars, ix);
-  while (ix < text.length) {
-    # do _print(_array(ix, char, peek(tokens)));
+  let char_ix = 0; # 1-indexed
+  let line_ix = 1; # 1-indexed
+  let char_in_line = 0; # 1-indexed
+  let char = "";
+  let chars = text + "\n"; # extra char to allow tokens to complete. Necessary esp for comments - infinite loop otherwise
+  def next_char_() {
+    let char_ix = char_ix + 1;
+    let char_in_line = char_in_line + 1;
+    let char = _get(chars, char_ix - 1);
+    if (char == "\n") {
+      let line_ix = line_ix + 1;
+      let char_in_line = 0; # 1-indexed
+    }
+  }
+  def prev_char_(){
+    let char_ix = char_ix - 1;
+    let char_in_line = char_in_line - 1;
+    let char = _get(chars, char_ix - 1);
+    if (char == "\n") {
+      let line_ix = line_ix - 1;
+      let char_in_line = -42; # @hack hard to know what it actually should be
+    }
+  }
+
+  let buffer = _array();
+  let tokens = _array();
+
+  do next_char_();
+  while (char_ix < text.length) {
+    # do _print(_array("tokenize", _array(char_ix, char, peek(tokens))));
 
     if (char == " " || char == "\t" || char == "\n") {
       # no-op
     } else if (char == "#") {
-      let ix = ix + 1; # consume
-      let char = _get(chars, ix);
+      do next_char_(); # consume
 
       while (char != "\n") {
-        let ix = ix + 1;
-        let char = _get(chars, ix);
+        do next_char_();
       }
     } else if (char == "\"") {
-      let ix = ix + 1; # consume
-      let char = _get(chars, ix);
+      do next_char_(); # consume
 
       let buffer = _array();
       while (char != "\"") {
         if (char == "\\") {
           # escape char
-          let ix = ix + 1;
-          let char = _get(chars, ix);
+          do next_char_();
           do buffer.push(generate_escape_code(char));
         } else {
           do buffer.push(char);
         }
 
-        let ix = ix + 1;
-        let char = _get(chars, ix);
+        do next_char_();
       }
 
       do tokens.push(_array("STRING", buffer.join("")));
@@ -64,10 +81,9 @@ def tokenize(text) {
       while (DIGITS.includes(char)) {
         do buffer.push(char);
 
-        let ix = ix + 1;
-        let char = _get(chars, ix);
+        do next_char_();
       }
-      let ix = ix - 1; # put non \d char back
+      do prev_char_(); # put non \d char back
 
       do tokens.push(_array("INTEGER", buffer.join("")));
     } else if (char == "_" || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
@@ -75,10 +91,9 @@ def tokenize(text) {
       while (char == "_" || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
         do buffer.push(char);
 
-        let ix = ix + 1;
-        let char = _get(chars, ix);
+        do next_char_();
       }
-      let ix = ix - 1; # put non-ident char back
+      do prev_char_(); # put non-ident char back
 
       let val = buffer.join("");
       if (RESERVED.includes(val)) {
@@ -91,10 +106,9 @@ def tokenize(text) {
       while (is_symbol_character(char)) {
         do buffer.push(char);
 
-        let ix = ix + 1;
-        let char = _get(chars, ix);
+        do next_char_();
       }
-      let ix = ix - 1; # put non-sym char back
+      do prev_char_(); # put non-sym char back
 
       def validity_filter(sym) {
         # checks whether sym is a prefix of buffer
@@ -133,8 +147,7 @@ def tokenize(text) {
       raise "unrecognized character: " + char;
     }
 
-    let ix = ix + 1;
-    let char = _get(text, ix);
+    do next_char_();
   }
   return tokens;
 }
