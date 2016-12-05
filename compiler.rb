@@ -11,6 +11,12 @@ def is_symbol_character(char)
   ALL_SYMBOLS.any? { |sym| sym.include?(char) }
 end
 
+def tokenize_error(msg, pos)
+  line, char = pos
+  puts "Tokenization error at #{line}:#{char}:\n\t#{msg}"
+  exit 1
+end
+
 def tokenize(text)
   # tokenize :: String -> [ Token ]
   # Token
@@ -20,19 +26,28 @@ def tokenize(text)
   #   | (:string, String)
   #   | (:reserved, String)
 
-  $char_ix = -1
-  $line_ix = 0
-  $char_in_line = -1
+  $char_ix = 0 # 1-indexed
+  $line_ix = 1 # 1-indexed
+  $char_in_line = 0 # 1-indexed
   $chars = (text+"\n").chars # extra char to allow tokens to complete. Necessary esp for comments - infinite loop otherwise
   $char = ""
   def next_char!
     $char_ix += 1
     $char_in_line += 1
-    $char = $chars[$char_ix]
+    $char = $chars[$char_ix-1]
     if $char == "\n"
       $line_ix += 1
-      $char_in_line = -1
+      $char_in_line = 0 # 1-indexed
     end
+  end
+  def prev_char!
+    if $char == "\n"
+      $line_ix -= 1
+      $char_in_line = -42 # @hack hard to know what it actually should be
+    end
+    $char_ix -= 1
+    $char_in_line -= 1
+    $char = $chars[$char_ix-1]
   end
 
   buffer = []
@@ -40,18 +55,19 @@ def tokenize(text)
 
   next_char!
   while $char_ix < $chars.length
-    # p ["tokenize", $char_ix, $char, peek(tokens)]
+    # p ["tokenize", $char_ix, $line_ix, $char_in_line, $char, peek(tokens)]
 
     case $char
     when /\s/
       # no-op
     when '#'
-      next_char # consume
+      next_char! # consume
 
       while $char != "\n"
         next_char!
       end
     when '"'
+      pos = [$line_ix, $char_in_line]
       next_char! # consume
 
       buffer.clear
@@ -66,57 +82,64 @@ def tokenize(text)
 
         next_char!
       end
-      tokens << [:string, buffer.join]
+      tokens << [:string, buffer.join, pos]
     when /\d/
+      pos = [$line_ix, $char_in_line]
+
       buffer.clear
       while $char =~ /\d/
         buffer << $char
 
         next_char!
       end
-      $char_ix -= 1 # put non \d char back
-      tokens << [:integer, buffer.join]
+      prev_char! # put non \d char back
+      tokens << [:integer, buffer.join, pos]
     when /[_a-zA-Z]/
+      pos = [$line_ix, $char_in_line]
+
       buffer.clear
       while $char =~ /[_a-zA-Z0-9]/
         buffer << $char
 
         next_char!
       end
-      $char_ix -= 1 # put non-ident char back
+      prev_char! # put non-ident char back
 
       val = buffer.join
       if RESERVED.include?(val)
-        tokens << [:reserved, val]
+        tokens << [:reserved, val, pos]
       else
-        tokens << [:identifier, val]
+        tokens << [:identifier, val, pos]
       end
     when ->(c){is_symbol_character(c)}
+      pos = [$line_ix, $char_in_line]
+
       buffer.clear
       while is_symbol_character($char)
         buffer << $char
 
         next_char!
       end
-      $char_ix -= 1 # put non-sym char back
+      prev_char! # put non-sym char back
 
       while !buffer.empty?
         # p ['buffer', buffer]
         valid_prefixes = ALL_SYMBOLS.select { |sym| buffer.join.start_with?(sym) }.sort_by(&:length)
         if valid_prefixes.empty?
-          raise "unrecognized symbols: #{buffer.join}"
+          tokenize_error("cannot parse \"#{buffer.join}\" into symbols", pos)
         end
 
         to_push = valid_prefixes.last # longest valid prefix
-        tokens << [:symbol, to_push]
+        tokens << [:symbol, to_push, pos] # @todo: fix pos; won't always be correct
         buffer.shift(to_push.length) # remove consumed chars from the buffer
       end
     else
-      raise "unrecognized character: #{char}"
+      tokenize_error("unrecognized character: #{$char}", pos)
     end
 
     next_char!
   end
+  # p tokens
   tokens
 end
 
@@ -124,7 +147,7 @@ def parse(tokens)
   tokens = [[:symbol, '{']] + tokens + [[:symbol, '}']] # sigil for parsing a scope
   tokens = tokens.reverse # makes next_token! etc easier
   ast = parse_!(:scope, tokens)
-  raise "trailing tokens starting at: #{peek(tokens)[1]}" unless tokens.empty?
+  parse_error("expected EOF", peek(tokens)) unless tokens.empty?
   ast
 end
 
@@ -140,88 +163,97 @@ def peek(tokens)
   tokens.last
 end
 
+def tok_match(tok, target)
+  return (tok[0] == target[0] and tok[1] == target[1])
+end
+
+def parse_error(msg, tok)
+  type, val, (line, char) = tok
+  puts "Parse error at #{line}:#{char} (\"#{val}\"):\n\t#{msg}"
+  exit 1
+end
+
 def parse_!(state, tokens)
   # p ['parse_!', state, peek(tokens)]
-  # p ['parse_!', state, tokens.reverse]
 
   case state
   when :scope
-    next_token!(tokens) { |tok| raise "scope missing '{': #{tok[1]}" unless tok == [:symbol, '{'] }
+    next_token!(tokens) { |tok| parse_error("scope missing '{'", tok) unless tok_match(tok, [:symbol, '{']) }
     ast = []
     loop do
-      if peek(tokens) == [:symbol, "}"]
+      if tok_match(peek(tokens), [:symbol, "}"])
         next_token!(tokens)
         return [:scope, ast]
       end
       ast << parse_!(:statement, tokens)
     end
   when :let
-    target = next_token!(tokens) { |(type, val)| raise "bad let target: #{val}" unless type == :identifier }
-    next_token!(tokens) { |tok| raise "missing '=': #{tok[1]}" unless tok == [:symbol, '='] }
+    target = next_token!(tokens) { |tok| parse_error("bad let target", tok) unless tok[0] == :identifier }
+    next_token!(tokens) { |tok| parse_error("missing '='", tok) unless tok_match(tok, [:symbol, '=']) }
     rhs = parse_!(:expression, tokens)
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    next_token!(tokens) { |tok| parse_error("missing ';'", tok) unless tok_match(tok, [:symbol, ';']) }
     [:let, target, rhs]
   when :expression
     _parse_expression!(tokens)
   when :call # expression
-    name_ = next_token!(tokens) { |type, val| raise "bad call name: #{val}" unless type == :identifier }
-    next_token!(tokens) { |tok| raise "missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
+    name_ = next_token!(tokens) { |tok| parse_error("bad call name: #{val}", tok) unless tok[0] == :identifier }
+    next_token!(tokens) { |tok| parse_error("missing '('", tok) unless tok_match(tok, [:symbol, '(']) }
     args = parse_!(:explist, tokens)
-    next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+    next_token!(tokens) { |tok| parse_error("missing ')'", tok) unless tok_match(tok, [:symbol, ')']) }
     [:call, name_, args]
   when :do # statement
     expr = parse_!(:expression, tokens)
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    next_token!(tokens) { |tok| parse_error("missing ';'", tok) unless tok_match(tok, [:symbol, ';']) }
     [:do, expr]
   when :explist
-    if peek(tokens) == [:symbol, ")"]
+    if tok_match(peek(tokens), [:symbol, ")"])
       []
     else
       buffer = []
       loop do
         buffer << parse_!(:expression, tokens)
         popped = next_token!(tokens)
-        if popped != [:symbol, ","]
+        if !tok_match(popped, [:symbol, ","])
           tokens << popped # return the token
           return buffer
         end
       end
     end
   when :arglist
-    if peek(tokens) == [:symbol, ")"]
+    if tok_match(peek(tokens), [:symbol, ")"])
       []
     else
       buffer = []
       loop do
-        buffer << next_token!(tokens) { |type, val| raise "bad arg: #{val}" unless type == :identifier }
+        buffer << next_token!(tokens) { |tok| parse_error("bad arg", tok) unless tok[0] == :identifier }
         popped = next_token!(tokens)
-        if popped != [:symbol, ","]
+        if !tok_match(popped, [:symbol, ","])
           tokens << popped # return the token
           return buffer
         end
       end
     end
   when :def
-    name_ = next_token!(tokens) { |(type, val)| raise "bad function name: #{val}" unless type == :identifier }
-    next_token!(tokens) { |tok| raise "def '#{name_[1]}' missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
+    name_ = next_token!(tokens) { |tok| parse_error("bad function name", tok) unless tok[0] == :identifier }
+    next_token!(tokens) { |tok| parse_error("def '#{name_[1]}' missing '('", tok) unless tok_match(tok, [:symbol, '(']) }
     params = parse_!(:arglist, tokens)
-    next_token!(tokens) { |tok| raise "def '#{name_[1]}' missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+    next_token!(tokens) { |tok| parse_error("def '#{name_[1]}' missing ')'", tok) unless tok_match(tok, [:symbol, ')']) }
     body = parse_!(:scope, tokens)
     [:def, name_, params, body]
   when :if
-    next_token!(tokens) { |tok| raise "'if' missing '(': #{tok[1]}" unless tok == [:symbol, '('] }
+    next_token!(tokens) { |tok| parse_error("'if' missing '('", tok) unless tok_match(tok, [:symbol, '(']) }
     cond = parse_!(:expression, tokens)
-    next_token!(tokens) { |tok| raise "'if' missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+    next_token!(tokens) { |tok| parse_error("'if' missing ')'", tok) unless tok_match(tok, [:symbol, ')']) }
     then_ = parse_!(:scope, tokens)
-    if peek(tokens) == [:identifier, 'else']
+    if tok_match(peek(tokens), [:identifier, 'else'])
       next_token!(tokens) # consume 'else'
-      if peek(tokens) == [:symbol, '{']
+      if tok_match(peek(tokens), [:symbol, '{'])
         else_ = parse_!(:scope, tokens)
-      elsif peek(tokens) == [:reserved, 'if']
+      elsif tok_match(peek(tokens), [:reserved, 'if'])
         next_token!(tokens) # consume 'if'
         else_ = parse_!(:if, tokens)
       else
-        raise "bad 'else' branch: #{peek(tokens)[1]}"
+        parse_error("bad 'else' branch", peek(tokens))
       end
     end
     [:if, cond, then_, else_]
@@ -231,35 +263,35 @@ def parse_!(state, tokens)
     [:while, cond, body]
   when :return
     val = parse_!(:expression, tokens)
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    next_token!(tokens) { |tok| parse_error("missing ';'", tok) unless tok_match(tok, [:symbol, ';']) }
     [:return, val]
   when :break
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    next_token!(tokens) { |tok| parse_error("missing ';'", tok) unless tok_match(tok, [:symbol, ';']) }
     [:break]
   when :raise
     val = parse_!(:expression, tokens)
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    next_token!(tokens) { |tok| parse_error("missing ';'", tok) unless tok_match(tok, [:symbol, ';']) }
     [:raise, val]
   when :alloc
-    target = next_token!(tokens){ |type, val| raise "bad alloc target: #{val}" unless type == :identifier }
-    next_token!(tokens) { |tok| raise "missing ';': #{tok[1]}" unless tok == [:symbol, ';'] }
+    target = next_token!(tokens){ |tok| parse_error("bad alloc target", tok) unless tok[0] == :identifier }
+    next_token!(tokens) { |tok| parse_error("missing ';'", tok) unless tok_match(tok, [:symbol, ';']) }
     [:alloc, target]
   when :statement
-    type, val = tok = next_token!(tokens)
+    type, val, pos = tok = next_token!(tokens)
     case type
     when :reserved
       if %w(let def if while return break do raise alloc).include?(val)
         parse_!(val.to_sym, tokens)
       else
-        raise "unknown reserved word: #{val}"
+        parse_error("unknown reserved word", tok)
       end
     when nil
-      raise "unexpected end of input"
+      parse_error("unexpected end of input", tok) # @todo I doubt this works; it'll probs throw a ruby error instead. maybe move into next_token! ?
     else
-      raise "unexpected statement starting at: #{val}; tokens=#{tokens.reverse}"
+      parse_error("unexpected statement", tok)
     end
   else
-    raise "unimplemented state: #{state}"
+    raise "iae: unimplemented state: #{state}"
   end
 end
 
@@ -298,31 +330,31 @@ end
 def _parse_operand!(tokens)
   # p ['_parse_operand!', peek(tokens)]
 
-  type, val = tok = next_token!(tokens)
+  type, val, pos = tok = next_token!(tokens)
   case type
   when :string
     tok
   when :integer
     tok
   when :reserved
-    raise "reserved word in expression: #{val}" unless val == 'true' or val == 'false'
+    parse_error("reserved word in expression", tok) unless val == 'true' or val == 'false'
     tok
   when :identifier
-    if peek(tokens) == [:symbol, '(']
+    if tok_match(peek(tokens), [:symbol, '('])
       tokens << tok # put fxn name back
       parse_!(:call, tokens)
     else
       tok
     end
   when :symbol
-    if tok == [:symbol, '-']
+    if tok_match(tok, [:symbol, '-'])
       [:binop, tok, [:integer, "0"], _parse_operand!(tokens)]
-    elsif tok == [:symbol, '(']
+    elsif tok_match(tok, [:symbol, '('])
       lhs = parse_!(:expression, tokens)
-      next_token!(tokens) { |tok| raise "missing ')': #{tok[1]}" unless tok == [:symbol, ')'] }
+      next_token!(tokens) { |tok| parse_error("missing ')'", tok) unless tok_match(tok, [:symbol, ')']) }
       lhs
     else
-      raise "bad lhs: #{tok[1]}"
+      parse_error("bad lhs", tok)
     end
   else
     raise "iae"
@@ -413,22 +445,22 @@ def codegen(node)
     target, = node
     "let #{codegen(target)};"
   when :integer
-    val, = node
+    val, pos = node
     "#{val}"
   when :string
-    val, = node
+    val, pos = node
     "\"#{string_escape(val)}\""
   when :reserved
-    word, = node
+    word, pos = node
     "#{word}"
   when :symbol
-    val, = node
+    val, pos = node
     if val == '=='
       val = '==='
     end
     "#{val}"
   when :identifier
-    varname, = node
+    varname, pos = node
     "#{varname}"
   else
     raise "iae: unrecognized node type: #{node_type}"
@@ -468,7 +500,7 @@ def string_escape(str)
 end
 
 def _tok_to_string(tok)
-  type, val = tok
+  type, val, pos = tok
   val_to_print = string_escape(val)
 
   "[ :#{type.to_s.upcase}, \"#{val_to_print}\" ],"
