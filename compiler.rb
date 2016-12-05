@@ -144,15 +144,20 @@ def tokenize(text)
 end
 
 def parse(tokens)
-  tokens = [[:symbol, '{']] + tokens + [[:symbol, '}']] # sigil for parsing a scope
   tokens = tokens.reverse # makes next_token! etc easier
-  ast = parse_!(:scope, tokens)
+  ast = []
+  while !peek(tokens).nil?
+    ast << parse_!(:statement, tokens)
+  end
   parse_error("expected EOF", peek(tokens)) unless tokens.empty?
   ast
 end
 
 def next_token!(tokens)
   tok = tokens.pop
+  if tok.nil?
+    parse_error("unexpected EOF", [:eof, "EOF", [-1, -1]])
+  end
   if block_given?
     yield tok
   end
@@ -371,8 +376,8 @@ def _precedence(op_val)
   end
 end
 
-def generate_code(node)
-  codegen(node)
+def generate_code(ast)
+  "#{ast.map{|stmt| codegen(stmt)}.join("\n")}"
 end
 
 def codegen_list(list, sep)

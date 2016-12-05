@@ -168,20 +168,29 @@ def tokenize(text) {
 }
 
 def parse_entrypoint(tokens) {
-  let prefix = _array(_array("SYMBOL", "{"));
-  let tokens = prefix.concat(tokens);
-  do tokens.push(_array("SYMBOL", "}"));
   do tokens.reverse(); # convinient for next_token_ etc
-  let ast = parse_("SCOPE", tokens);
+
+  alloc ast;
+  let ast = _array();
+  while (peek(tokens)) { # @hack if undefined
+    do ast.push(parse_("STATEMENT", tokens));
+  }
+
   if (tokens.length != 0) {
     do parse_error("expected EOF", peek(tokens));
-  } else {
-    return ast;
   }
+
+  return ast;
 }
 
 def next_token_(tokens) {
-  return tokens.pop();
+  let tok = tokens.pop();
+  if (tok) {
+    #@hack around undefined
+    return tok;
+  } else {
+    do parse_error("unexpected EOF", _array("EOF", "EOF", _array(-1, -1)));
+  }
 }
 
 def peek(tokens) {
@@ -193,12 +202,12 @@ def tok_match(tok, type, val) {
 }
 
 def parse_error(msg, tok) {
-  let type = _leftpop(tok);
-  let val = _leftpop(tok);
-  let pos = _leftpop(tok);
+  let type = _get(tok, 0);
+  let val = _get(tok, 1);
+  let pos = _get(tok, 2);
 
-  let line = _leftpop(pos);
-  let char = _leftpop(pos);
+  let line = _get(pos, 0);
+  let char = _get(pos, 1);
 
   do _print("Parse error at "+line+":"+char+" (\""+val+"\"):\n\t"+msg);
   do _EXIT(1);
@@ -513,8 +522,8 @@ def _precedence(op_val) {
   }
 }
 
-def generate_code(node) {
-  return codegen(node);
+def generate_code(ast) {
+  return ast.map(codegen).join("\n");
 }
 
 def codegen_list(list, sep) {
@@ -529,8 +538,7 @@ def codegen(node) {
   if (node_type == "SCOPE") {
     let body = _leftpop(node);
 
-    let temp = body.map(codegen);
-    return temp.join("\n");
+    return body.map(codegen).join("\n");
   } else if (node_type == "LET") {
     alloc target;
     alloc rhs;
