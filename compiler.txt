@@ -614,6 +614,12 @@ def codegen(node) {
     } else if (name_str == "_leftpop") {
       let arr = _leftpop(args);
       return codegen(arr)+".splice(0,1)[0]";
+    } else if (name_str == "_leftpush") {
+      alloc arr;
+      alloc val;
+      let arr = _leftpop(args);
+      let val = _leftpop(args);
+      return codegen(arr)+".unshift("+codegen(val)+")";
     } else if (name_str == "_get") {
       alloc arr;
       alloc ix;

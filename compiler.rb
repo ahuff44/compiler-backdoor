@@ -444,6 +444,9 @@ def codegen(node)
     when '_leftpop'
       arr, = args
       "#{codegen(arr)}.splice(0,1)[0]"
+    when '_leftpush'
+      arr, val = args
+      "#{codegen(arr)}.unshift(#{codegen(val)})"
     when '_get'
       arr, ix = args
       "#{codegen(arr)}[#{codegen(ix)}]"
