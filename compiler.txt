@@ -1,5 +1,6 @@
-let RESERVED = _array("true", "false", "let", "def", "if", "while", "print", "return", "break", "do", "raise", "alloc");
-let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}");
+let RESERVED = _array("true", "false", "let", "def", "if", "while", "return", "break", "do", "raise", "alloc");
+let STATEMENT_STARTERS = _array("let", "def", "if", "while", "return", "break", "do", "raise", "alloc");
+let SYNTAX = _array("=", ";", "(", ")", ",", "{", "}", "<<");
 let BINOPS = _array(   ".", "*", "+", "-", "==", "!=", "<", ">", "<=", ">=", "&&", "||");
 let BINOP_PREC = _array(0,   10,  20,  20,  30,   30,   30,  30,  30,   30,   40,   50);
 let ALL_SYMBOLS = SYNTAX.concat(BINOPS);
@@ -47,7 +48,46 @@ def tokenize(text) {
       let char_in_line = -42; # @hack hard to know what it actually should be
     }
     let char_ix = char_ix - 1;
+    if (char_ix < 0) {
+      raise "iae: sub-0 char index";
+    }
     let char = _get(chars, char_ix - 1);
+  }
+
+  def tokenize_heredoc(pos) {
+    let target = _array();
+    while (char == "_" || DIGITS.includes(char) || LOWERCASE.includes(char) || UPPERCASE.includes(char)) {
+      do target.push(char);
+
+      do next_char_();
+    }
+    if (char != "\n") {
+      do tokenize_error("bad heredoc header; expected \\n, got \""+char+"\"", pos);
+    }
+
+    def array_eq(arr1, arr2) {
+      if (arr1.length != arr2.length) {
+        return false;
+      }
+      let ix = 0;
+      while (ix < arr1.length) {
+        if (_get(arr1, ix) != _get(arr2, ix)) {
+          return false;
+        }
+        let ix = ix + 1;
+      }
+      return true;
+    }
+
+    let buffer = _array();
+    while (false == array_eq(buffer.slice(-target.length), target)) {
+      do buffer.push(char);
+
+      do next_char_();
+    }
+    do prev_char_(); # put next char back
+
+    return _array("STRING", buffer.join(""), pos);
   }
 
   let buffer = _array();
@@ -119,6 +159,13 @@ def tokenize(text) {
       let buffer = _array();
       while (is_symbol_character(char)) {
         do buffer.push(char);
+
+        if (_get(buffer, 0) == "<" && _get(buffer, 1) == "<" && buffer.length == 2){ # @hack the placement of the code is... awkward. the exit mechanism back into normal execution state is p weird too
+
+          do next_char_();
+          do tokens.push(tokenize_heredoc(pos));
+          let buffer = _array();
+        }
 
         do next_char_();
       }
@@ -410,17 +457,13 @@ def parse_(state, tokens) {
     let type = _get(tok, 0);
     let val = _get(tok, 1);
     if (type == "RESERVED") {
-      let STATEMENT_STARTERS = _array("let", "def", "if", "while", "return", "break", "do", "raise", "alloc");
       if (STATEMENT_STARTERS.includes(val)) {
         return parse_(val.toUpperCase(), tokens);
       } else {
-        do parse_error("unknown reserved word", tok);
+        raise "iae: unknown reserved word: "+_get(tok, 1);
       }
-    } else if (type) {
-      do parse_error("unexpected statement", tok);
     } else {
-      # @hack for type == undefined
-      do parse_error("unexpected end of input", tok); # @todo I doubt this works; it'll probs throw a ruby error instead. maybe move into next_token! ?
+      do parse_error("unexpected statement", tok);
     }
   } else {
     raise "iae: unimplemented state: " + state;

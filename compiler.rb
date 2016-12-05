@@ -2,6 +2,7 @@
 
 
 RESERVED = %w(true false let def if while return break do raise alloc)
+STATEMENT_STARTERS = %w(let def if while return break do raise alloc)
 SYNTAX = %w(= ; ( ) , { } <<)
 BINOPS = %w(    . *  +  -  == != <  >  <= >= && ||)
 BINOP_PREC = %w(0 10 20 20 30 30 30 30 30 30 40 50).map(&:to_i)
@@ -33,9 +34,6 @@ def tokenize(text)
   $char = ""
   def next_char!
     $char_ix += 1
-    if $char_ix >= $chars.length
-      tokenize_error("Unexpected EOF", [-1, -1])
-    end
     $char_in_line += 1
     $char = $chars[$char_ix-1]
     if $char == "\n"
@@ -172,7 +170,7 @@ def tokenize(text)
 
     next_char!
   end
-  p tokens
+  # p tokens
   tokens
 end
 
@@ -318,13 +316,11 @@ def parse_!(state, tokens)
     type, val, pos = tok = next_token!(tokens)
     case type
     when :reserved
-      if %w(let def if while return break do raise alloc).include?(val)
+      if STATEMENT_STARTERS.include?(val)
         parse_!(val.to_sym, tokens)
       else
-        parse_error("unknown reserved word", tok)
+        raise "iae: unknown reserved word: #{tok}"
       end
-    when nil
-      parse_error("unexpected end of input", tok) # @todo I doubt this works; it'll probs throw a ruby error instead. maybe move into next_token! ?
     else
       parse_error("unexpected statement", tok)
     end
