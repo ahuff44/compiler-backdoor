@@ -470,6 +470,8 @@ def codegen(node)
     when '_inspect'
       data, = args
       "require('util').inspect(#{codegen(data)}, false, null)"
+    when '_input' # breaks on \n^D, not \n, because ~ N ~ O ~ D ~ E ~
+      "require('fs').readFileSync('/dev/stdin').toString().slice(0, -1)"
     when '_print'
       val, = args
       "console.log(#{codegen(val)})"
