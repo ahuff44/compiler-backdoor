@@ -1,0 +1,13 @@
+def fib(x) {
+  if (x < 2) {
+    return x;
+  } else {
+    return fib(x-1) + fib(x-2);
+  }
+}
+
+let i = 0;
+while (i < 10) {
+  do _print(_array(i, fib(i)));
+  let i = i + 1;
+}
