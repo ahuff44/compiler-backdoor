@@ -467,6 +467,9 @@ def codegen(node)
     when '_writeFile'
       fname, data = args
       "require('fs').writeFileSync(#{codegen(fname)}, #{codegen(data)}, 'utf-8')"
+    when '_makeExe'
+      fname, = args
+      "require('fs').chmodSync(#{codegen(fname)}, '755')"
     when '_inspect'
       data, = args
       "require('util').inspect(#{codegen(data)}, false, null)"
@@ -589,4 +592,7 @@ File.write("ahuff/main_ast.txt", ast) # @debug
 # puts "\nast:\n#{ast}"
 code = generate_code(ast)
 # puts "\ncode:\n#{code}"
-File.write(outfile, code)
+prefix = "#!/usr/bin/env node\n\n"
+File.write(outfile, prefix + code)
+require 'fileutils'
+FileUtils.chmod(0755, outfile)

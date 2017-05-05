@@ -652,6 +652,9 @@ def codegen(node) {
       let fname = _leftpop(args);
       let data = _leftpop(args);
       return "require('fs').writeFileSync("+codegen(fname)+", "+codegen(data)+", 'utf-8')";
+    } else if (name_str == "_makeExe") {
+      let fname = _leftpop(args);
+      return "require('fs').chmodSync("+codegen(fname)+", '755')";
     } else if (name_str == "_inspect") {
       let data = _leftpop(args);
       return "require('util').inspect("+codegen(data)+", false, null)";
@@ -803,4 +806,6 @@ do _writeFile("ahuff/boot_tokens.txt", _tokens_to_string(tokens));
 let ast = parse_entrypoint(tokens);
 do _writeFile("ahuff/boot_ast.txt", _inspect(ast));
 let code = generate_code(ast);
-do _writeFile(outfile, code);
+let prefix = "#!/usr/bin/env node\n\n";
+do _writeFile(outfile, prefix + code);
+do _makeExe(outfile);
